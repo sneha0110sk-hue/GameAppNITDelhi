@@ -476,6 +476,7 @@ function GameApp() {
   const currentBid = gameState.bid?.currentHighBid || 0;
   const bidSuit = gameState.bid?.suit;
   const winnerIndex = gameState.bid?.winnerIndex;
+  const isMyTurn = gameState?.currentTurnIndex === mySeatIndex;
 
   return (
     <>
@@ -536,7 +537,7 @@ function GameApp() {
             })}
           </div>
         </div>
-        {gameState.status === 'BIDDING' && isActive && !bidSuit && (
+        {gameState.status === 'BIDDING' && isMyTurn && !bidSuit && (
           <div className="absolute inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in p-4">
             <div className="glass-panel p-4 md:p-8 rounded-2xl text-center border-gold border-2 max-w-sm w-full">
               {winnerIndex === mySeatIndex ? (
