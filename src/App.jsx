@@ -10,7 +10,7 @@ import {
   signOut 
 } from 'firebase/auth';
 import { getFirestore, doc, setDoc, getDoc, onSnapshot, updateDoc, arrayUnion, increment, runTransaction } from 'firebase/firestore';
-import { Heart, Diamond, Club, Spade, RotateCcw, Pencil, Check, X, LogOut, UserCircle, Play, Bot } from 'lucide-react';
+import { Heart, Diamond, Club, Spade, RotateCcw, Pencil, Check, X, LogOut, UserCircle, Play, Eye, EyeOff } from 'lucide-react';
 
 // --- STYLES ---
 const styles = `
@@ -33,7 +33,6 @@ const styles = `
   transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
   box-shadow: -1px 1px 3px rgba(0,0,0,0.3);
   transform-style: preserve-3d;
-  backface-visibility: hidden;
 }
 .card-hover:hover {
   transform: translateY(-15px) scale(1.05) !important;
@@ -65,23 +64,13 @@ const styles = `
   transform: translateY(-2px);
   box-shadow: 0 5px 15px rgba(0,0,0,0.3);
 }
-
-/* --- DEALING ANIMATION --- */
 @keyframes dealCard {
-  from { 
-    opacity: 0; 
-    transform: translate(0, -200%) scale(0.1); /* Start small and possibly from center-ish relative to player */
-  }
-  to { 
-    opacity: 1; 
-    transform: translate(0, 0) scale(1); 
-  }
+  from { opacity: 0; transform: translateY(-100px) scale(0.5); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 .animate-deal {
-  animation: dealCard 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-  opacity: 0; /* Hidden until animation starts */
+  animation: dealCard 0.4s ease-out forwards;
 }
-
 @keyframes pulse-gold {
   0% { box-shadow: 0 0 0 0 rgba(255, 215, 0, 0.4); }
   70% { box-shadow: 0 0 0 10px rgba(255, 215, 0, 0); }
@@ -148,9 +137,9 @@ const Card = ({ card, faceDown = false, onClick, playable = false, isSmall = fal
   const rotation = total > 1 ? (index - (total - 1) / 2) * 5 : 0;
   const translateY = total > 1 ? Math.abs(index - (total - 1) / 2) * 2 : 0;
 
-  // UPDATED SIZES: Increased both 'small' and 'normal' dimensions
-  const smallClasses = 'w-10 h-14 md:w-14 md:h-20 text-[10px] md:text-sm';
-  const normalClasses = 'w-16 h-24 md:w-24 md:h-36 text-sm md:text-lg';
+  // Large card sizes for visibility
+  const smallClasses = 'w-12 h-16 md:w-16 md:h-24 text-[10px] md:text-sm';
+  const normalClasses = 'w-20 h-28 md:w-28 md:h-40 text-sm md:text-lg';
 
   const animationStyle = { animationDelay: `${dealDelay}s` };
 
@@ -190,13 +179,7 @@ class ErrorBoundary extends React.Component {
       return (
         <div className="min-h-screen bg-red-900 text-white flex flex-col items-center justify-center p-4 text-center">
           <h1 className="text-3xl font-bold mb-4">Game Crashed</h1>
-          <p className="mb-4">Don't worry, you can reset it.</p>
-          <div className="bg-black/50 p-4 rounded mb-6 text-xs font-mono text-left max-w-md overflow-auto">
-            {this.state.error?.toString()}
-          </div>
-          <button onClick={() => window.location.reload()} className="bg-white text-red-900 px-6 py-3 rounded font-bold shadow-lg hover:bg-gray-200">
-            Reload Game
-          </button>
+          <button onClick={() => window.location.reload()} className="bg-white text-red-900 px-6 py-3 rounded font-bold shadow-lg hover:bg-gray-200">Reload Game</button>
         </div>
       );
     }
@@ -213,6 +196,9 @@ function GameApp() {
   const [error, setError] = useState('');
   const [isEditingName, setIsEditingName] = useState(false);
   const [editingName, setEditingName] = useState('');
+  
+  // UI State for toggling the board view during bidding
+  const [viewingBoard, setViewingBoard] = useState(false);
 
   useEffect(() => { if (auth) return onAuthStateChanged(auth, setUser); }, []);
 
@@ -235,11 +221,18 @@ function GameApp() {
   useEffect(() => {
     if (!user || !gameId || !db) return;
     const unsubscribe = onSnapshot(doc(db, 'artifacts', APP_ID, 'public', 'data', 'games', gameId), (snap) => {
-      if (snap.exists()) { setGameState(snap.data()); setError(''); }
-      else { if (gameId.length > 5) setError("Game not found. Check code."); }
+      if (snap.exists()) { 
+        setGameState(snap.data()); 
+        setError(''); 
+      } else { if (gameId.length > 5) setError("Game not found. Check code."); }
     }, (err) => console.error(err));
     return () => unsubscribe();
   }, [user, gameId]);
+
+  // Reset view board state when turn changes
+  useEffect(() => {
+    setViewingBoard(false);
+  }, [gameState?.currentTurnIndex]);
 
   // --- ACTIONS ---
   const createGame = async () => {
@@ -407,7 +400,6 @@ function GameApp() {
             <h1 className="text-3xl md:text-5xl font-serif text-gold mb-6 drop-shadow-lg">Royal Court</h1>
             {error && <div className="bg-red-900/50 text-red-200 p-2 rounded mb-4 text-sm">{error}</div>}
 
-            {/* 1. ENTER CODE */}
             {!gameState && (
               <div className="space-y-4">
                 <div className="text-sm text-gray-300 mb-2 flex justify-center gap-2 items-center">
@@ -421,7 +413,6 @@ function GameApp() {
               </div>
             )}
 
-            {/* 2. JOIN BUTTON */}
             {gameState && !amIJoined && (
               <div className="space-y-4 animate-in fade-in">
                 <div className="bg-black/40 p-4 rounded-xl border border-green-500/50">
@@ -436,7 +427,6 @@ function GameApp() {
               </div>
             )}
 
-            {/* 3. LOBBY LIST */}
             {gameState && amIJoined && (
               <div className="space-y-6 animate-in zoom-in">
                 <div className="bg-black/40 p-4 rounded-xl border border-white/10">
@@ -496,13 +486,6 @@ function GameApp() {
   const bidSuit = gameState.bid?.suit;
   const winnerIndex = gameState.bid?.winnerIndex;
   const isMyTurn = gameState?.currentTurnIndex === mySeatIndex;
-  
-  // TEAM BIDDING LOGIC: Is my partner winning?
-  const myTeam = gameState.players[mySeatIndex].team;
-  const highBidderTeam = gameState.bid?.currentHighBidder !== undefined && gameState.bid?.currentHighBidder !== null
-    ? gameState.players[gameState.bid.currentHighBidder].team 
-    : null;
-  const isTeammateWinning = highBidderTeam === myTeam;
 
   return (
     <>
@@ -543,9 +526,14 @@ function GameApp() {
                   <div className="absolute -bottom-4 md:-bottom-6 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur px-2 py-0.5 rounded text-[10px] md:text-xs whitespace-nowrap border border-white/10">{isMe ? 'YOU' : player.name}</div>
                 </div>
                 {isMe ? (
-                  <div className="flex flex-col items-center -space-y-16 md:-space-y-24 transition-all duration-300 pb-2 md:pb-4">
-                    <div className="flex gap-2 md:gap-4 opacity-90">{(player.faceDown || []).filter(c=>c&&c.id).map((c,i)=><Card key={c.id} dealDelay={dealDelay + i*0.05} faceDown isSmall playable={isActive && player.hand.length===0 && player.faceUp.length===0} onClick={()=>playCard(c,'faceDown')}/>)}</div>
-                    <div className="flex gap-2 md:gap-4 z-10 mb-8 md:mb-12">{(player.faceUp || []).filter(c=>c&&c.id).map((c,i)=><Card key={c.id} dealDelay={dealDelay + 3*0.05 + i*0.05} card={c} playable={isActive} onClick={()=>playCard(c,'faceUp')}/>)}</div>
+                  <div className="flex flex-col items-center -space-y-24 md:-space-y-36 transition-all duration-300 pb-2 md:pb-4">
+                    {/* FACE DOWN - Moved Higher */}
+                    <div className="flex gap-2 md:gap-4 opacity-90 mb-8">{(player.faceDown || []).filter(c=>c&&c.id).map((c,i)=><Card key={c.id} dealDelay={dealDelay + i*0.05} faceDown isSmall playable={isActive && player.hand.length===0 && player.faceUp.length===0} onClick={()=>playCard(c,'faceDown')}/>)}</div>
+                    
+                    {/* FACE UP - LARGE VISIBILITY */}
+                    <div className="flex gap-4 md:gap-6 z-10 mb-16 md:mb-24">{(player.faceUp || []).filter(c=>c&&c.id).map((c,i)=><Card key={c.id} dealDelay={dealDelay + 3*0.05 + i*0.05} card={c} playable={isActive} onClick={()=>playCard(c,'faceUp')}/>)}</div>
+                    
+                    {/* HAND - FANNED AT BOTTOM */}
                     <div className="flex -space-x-3 md:-space-x-4 h-24 md:h-32 items-end z-20 hover:-space-x-1 transition-all">{(player.hand || []).filter(c=>c&&c.id).map((c,i)=><Card key={c.id} dealDelay={dealDelay + 6*0.05 + i*0.05} card={c} index={i} total={player.hand.length} playable={isActive} onClick={()=>playCard(c,'hand')}/>)}</div>
                   </div>
                 ) : (
@@ -567,32 +555,41 @@ function GameApp() {
             })}
           </div>
         </div>
+        
+        {/* BIDDING UI - NOW WITH TOGGLE */}
         {gameState.status === 'BIDDING' && isMyTurn && !bidSuit && (
-          <div className="absolute inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in p-4">
-            <div className="glass-panel p-4 md:p-8 rounded-2xl text-center border-gold border-2 max-w-sm w-full">
-              {winnerIndex === mySeatIndex ? (
-                 <div><h2 className="text-xl md:text-3xl font-serif text-gold mb-4 md:mb-6">Choose Master Suit</h2><div className="flex gap-2 md:gap-4 justify-center">{SUITS.map(s=><button key={s} onClick={()=>selectMasterSuit(s)} className="bg-white p-2 md:p-4 rounded-xl hover:scale-110 transition shadow-lg">{getSuitIcon(s,32)}</button>)}</div></div>
-              ) : (
-                <div>
-                  <h2 className="text-xl md:text-2xl font-serif mb-2">Place Bid</h2>
-                  <div className="text-gold mb-4 md:mb-6">Current High: {currentBid}</div>
+          <>
+            {/* 1. MINIMIZED STATE (Just a button to bring back UI) */}
+            {viewingBoard ? (
+              <div className="absolute bottom-32 left-1/2 -translate-x-1/2 z-50">
+                <button onClick={() => setViewingBoard(false)} className="bg-blue-600 text-white px-6 py-3 rounded-full font-bold shadow-lg flex items-center gap-2 hover:bg-blue-500 transition animate-bounce">
+                  <RotateCcw size={20}/> Open Bidding
+                </button>
+              </div>
+            ) : (
+              /* 2. MAXIMIZED STATE (The full UI) */
+              <div className="absolute inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in p-4">
+                <div className="glass-panel p-4 md:p-8 rounded-2xl text-center border-gold border-2 max-w-sm w-full relative">
                   
-                  {/* TEAM BIDDING LOGIC: Hide bids if partner is winning */}
-                  {isTeammateWinning ? (
-                    <div className="mb-4 text-yellow-400 font-bold bg-yellow-900/30 p-2 rounded">
-                      Partner is winning with {currentBid}!
-                    </div>
+                  {/* TOGGLE BUTTON */}
+                  <button 
+                    onClick={() => setViewingBoard(true)} 
+                    className="absolute top-2 right-2 text-gray-400 hover:text-white p-2 rounded-full hover:bg-white/10 flex flex-col items-center gap-1"
+                    title="Hide to see cards"
+                  >
+                    <Eye size={24} />
+                    <span className="text-[10px]">View Table</span>
+                  </button>
+
+                  {winnerIndex === mySeatIndex ? (
+                     <div><h2 className="text-xl md:text-3xl font-serif text-gold mb-4 md:mb-6">Choose Master Suit</h2><div className="flex gap-2 md:gap-4 justify-center">{SUITS.map(s=><button key={s} onClick={()=>selectMasterSuit(s)} className="bg-white p-2 md:p-4 rounded-xl hover:scale-110 transition shadow-lg">{getSuitIcon(s,32)}</button>)}</div></div>
                   ) : (
-                    <div className="grid grid-cols-4 gap-2 mb-4">
-                      {[5,6,7,8].map(n=><button key={n} disabled={n<=currentBid} onClick={()=>makeBid(n)} className="bg-gold text-black font-bold py-2 md:py-3 rounded hover:bg-yellow-300 disabled:opacity-20 transition">{n}</button>)}
-                    </div>
+                    <div><h2 className="text-xl md:text-2xl font-serif mb-2">Place Bid</h2><div className="text-gold mb-4 md:mb-6">Current High: {currentBid}</div><div className="grid grid-cols-4 gap-2 mb-4">{[5,6,7,8].map(n=><button key={n} disabled={n<=currentBid} onClick={()=>makeBid(n)} className="bg-gold text-black font-bold py-2 md:py-3 rounded hover:bg-yellow-300 disabled:opacity-20 transition">{n}</button>)}</div><button onClick={()=>makeBid(0)} className="w-full bg-white/10 hover:bg-red-900/50 py-2 md:py-3 rounded text-red-300 border border-red-900/30">PASS</button></div>
                   )}
-                  
-                  <button onClick={()=>makeBid(0)} className="w-full bg-white/10 hover:bg-red-900/50 py-2 md:py-3 rounded text-red-300 border border-red-900/30">PASS</button>
                 </div>
-              )}
-            </div>
-          </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </>
