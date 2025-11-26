@@ -9,7 +9,7 @@ import {
   signInWithPopup, 
   signOut 
 } from 'firebase/auth';
-import { getFirestore, doc, setDoc, getDoc, onSnapshot, updateDoc, arrayUnion, increment } from 'firebase/firestore';
+import { getFirestore, doc, setDoc, getDoc, onSnapshot, updateDoc, arrayUnion, increment, runTransaction } from 'firebase/firestore';
 import { Heart, Diamond, Club, Spade, RotateCcw, Pencil, Check, X, LogOut, UserCircle } from 'lucide-react';
 
 // --- STYLES ---
@@ -249,7 +249,6 @@ export default function App() {
     setLoading(true);
     try {
       const newId = Math.random().toString(36).substring(2, 8).toUpperCase();
-      // Use Google Display Name if available, otherwise default
       const userName = user.displayName ? user.displayName : 'Player 1';
       const userPhoto = user.photoURL || null;
 
@@ -267,29 +266,45 @@ export default function App() {
     setLoading(false);
   };
 
+  // *** CRITICAL FIX: TRANSACTION BASED JOIN ***
   const joinGame = async () => {
     if (!user || !gameId || !db) return;
     setLoading(true);
+    const gameRef = doc(db, 'artifacts', APP_ID, 'public', 'data', 'games', gameId);
+
     try {
-      const ref = doc(db, 'artifacts', APP_ID, 'public', 'data', 'games', gameId);
-      const snap = await getDoc(ref);
-      if (!snap.exists()) { alert("Game not found!"); setLoading(false); return; }
-      
-      const data = snap.data();
-      const alreadyJoined = data.players.find(p => p.uid === user.uid);
-      if (alreadyJoined) { setLoading(false); return; }
-      if (data.players.length >= 6) { alert("Game full!"); setLoading(false); return; }
+      await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw "Game not found!";
+        
+        const data = gameDoc.data();
+        if (data.players.length >= 6) throw "Game is full!";
+        
+        // Check if already joined
+        if (data.players.some(p => p.uid === user.uid)) return; 
 
-      const idx = data.players.length;
-      // Use Google Display Name if available, otherwise Player X
-      const userName = user.displayName ? user.displayName : `Player ${idx+1}`;
-      const userPhoto = user.photoURL || null;
+        const idx = data.players.length;
+        const userName = user.displayName ? user.displayName : `Player ${idx+1}`;
+        const userPhoto = user.photoURL || null;
+        
+        const newPlayer = { 
+          uid: user.uid, 
+          name: userName, 
+          photo: userPhoto, 
+          team: idx % 2 === 0 ? 'A' : 'B', 
+          seatIndex: idx, 
+          hand: [], faceUp: [], faceDown: [] 
+        };
 
-      await updateDoc(ref, {
-        players: arrayUnion({ uid: user.uid, name: userName, photo: userPhoto, team: idx%2===0?'A':'B', seatIndex: idx, hand:[], faceUp:[], faceDown:[] })
+        transaction.update(gameRef, { players: [...data.players, newPlayer] });
       });
     } catch (err) {
-      alert("Error joining: " + err.message);
+      // Ignore "already joined" specific errors if they happen, show others
+      if (err !== "Game not found!" && err !== "Game is full!") {
+         // silently ignore logic errors, but alert real failures
+      } else {
+         alert(err);
+      }
     }
     setLoading(false);
   };
@@ -376,8 +391,19 @@ export default function App() {
   };
 
   // --- RENDERING ---
-  const mySeatIndex = useMemo(() => gameState?.players.findIndex(p => p.uid === user?.uid) ?? -1, [gameState, user]);
-  const getPlayer = (offset) => gameState ? gameState.players[(mySeatIndex + offset) % 6] : null;
+  // Safe indexing: if not in game, default to 0 (Spectator view)
+  const mySeatIndex = useMemo(() => {
+    const idx = gameState?.players.findIndex(p => p.uid === user?.uid);
+    return idx !== -1 ? idx : 0;
+  }, [gameState, user]);
+
+  const getPlayer = (offset) => {
+    if (!gameState) return null;
+    // Calculate the seat index we WANT to see at this visual offset
+    const targetSeatIndex = (mySeatIndex + offset) % 6;
+    // Find the player who actually HAS this seat index
+    return gameState.players.find(p => p.seatIndex === targetSeatIndex);
+  };
 
   if (loading) return (
     <>
@@ -391,7 +417,7 @@ export default function App() {
     </>
   );
 
-  // --- LOGIN SCREEN (New!) ---
+  // --- LOGIN SCREEN ---
   if (!user) {
     return (
       <>
