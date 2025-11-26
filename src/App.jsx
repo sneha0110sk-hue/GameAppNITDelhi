@@ -138,30 +138,33 @@ const Card = ({ card, faceDown = false, onClick, playable = false, isSmall = fal
   const rotation = total > 1 ? (index - (total - 1) / 2) * 5 : 0;
   const translateY = total > 1 ? Math.abs(index - (total - 1) / 2) * 2 : 0;
 
+  // UPDATED SIZES: Increased both 'small' and 'normal' dimensions
+  const smallClasses = 'w-10 h-14 md:w-14 md:h-20 text-[10px] md:text-sm';
+  const normalClasses = 'w-16 h-24 md:w-24 md:h-36 text-sm md:text-lg';
+
   if (faceDown) {
     return (
       <div onClick={playable ? onClick : undefined} style={{ transform: `rotate(${rotation}deg) translateY(${translateY}px)` }}
-        className={`card-base card-pattern rounded-md border border-white/50 ${isSmall ? 'w-6 h-9 md:w-8 md:h-12' : 'w-12 h-16 md:w-20 md:h-28'} ${playable ? 'cursor-pointer card-hover ring-2 ring-yellow-400' : ''} flex items-center justify-center relative`}
+        className={`card-base card-pattern rounded-md border border-white/50 ${isSmall ? smallClasses : normalClasses} ${playable ? 'cursor-pointer card-hover ring-2 ring-yellow-400' : ''} flex items-center justify-center relative`}
       >
-        <div className="w-4 h-4 rounded-full bg-white/20 backdrop-blur-sm"></div>
+        <div className="w-6 h-6 rounded-full bg-white/20 backdrop-blur-sm"></div>
       </div>
     );
   }
-  if (!card) return <div className={`${isSmall ? 'w-6 h-9 md:w-8 md:h-12' : 'w-12 h-16 md:w-20 md:h-28'} border-2 border-dashed border-white/20 rounded-md`}></div>;
+  if (!card) return <div className={`${isSmall ? smallClasses : normalClasses} border-2 border-dashed border-white/20 rounded-md`}></div>;
   const isRed = card.suit === 'H' || card.suit === 'D';
   return (
     <div onClick={playable ? onClick : undefined} style={{ transform: `rotate(${rotation}deg) translateY(${translateY}px)` }}
-      className={`card-base bg-white rounded-md flex flex-col items-center justify-between p-0.5 md:p-1 select-none relative ${isSmall ? 'w-6 h-9 md:w-8 md:h-12 text-[8px] md:text-xs' : 'w-12 h-16 md:w-20 md:h-28 text-xs md:text-base'} ${playable ? 'cursor-pointer card-hover ring-2 md:ring-4 ring-yellow-400 z-10' : ''}`}
+      className={`card-base bg-white rounded-md flex flex-col items-center justify-between p-1 md:p-2 select-none relative ${isSmall ? smallClasses : normalClasses} ${playable ? 'cursor-pointer card-hover ring-2 md:ring-4 ring-yellow-400 z-10' : ''}`}
     >
-      <div className="self-start font-bold leading-none flex flex-col items-center"><span className={isRed ? 'text-red-600' : 'text-black'}>{card.rank}</span><div className="scale-75 origin-top">{getSuitIcon(card.suit, 8)}</div></div>
-      <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">{getSuitIcon(card.suit, isSmall ? 10 : 20)}</div>
-      <div className="self-end font-bold leading-none rotate-180 flex flex-col items-center"><span className={isRed ? 'text-red-600' : 'text-black'}>{card.rank}</span><div className="scale-75 origin-top">{getSuitIcon(card.suit, 8)}</div></div>
+      <div className="self-start font-bold leading-none flex flex-col items-center"><span className={isRed ? 'text-red-600' : 'text-black'}>{card.rank}</span><div className="scale-75 origin-top">{getSuitIcon(card.suit, 10)}</div></div>
+      <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">{getSuitIcon(card.suit, isSmall ? 16 : 32)}</div>
+      <div className="self-end font-bold leading-none rotate-180 flex flex-col items-center"><span className={isRed ? 'text-red-600' : 'text-black'}>{card.rank}</span><div className="scale-75 origin-top">{getSuitIcon(card.suit, 10)}</div></div>
     </div>
   );
 };
 
 // --- ERROR BOUNDARY ---
-// This prevents the "White Screen of Death" by catching errors
 class ErrorBoundary extends React.Component {
   constructor(props) { super(props); this.state = { hasError: false, error: null }; }
   static getDerivedStateFromError(error) { return { hasError: true, error }; }
@@ -506,20 +509,20 @@ function GameApp() {
             const isActive = gameState.currentTurnIndex === player.seatIndex;
             return (
               <div key={offset} className={`absolute ${positions[offset]} flex flex-col items-center transition-all duration-500`}>
-                <div className={`relative mb-2 md:mb-4 transition-all duration-300 ${isActive ? 'scale-110 md:scale-125 z-40' : 'scale-90 md:scale-100 z-10 opacity-80'}`}>
+                <div className={`relative mb-2 md:mb-4 transition-all duration-300 ${isActive ? 'scale-110 md:scale-125 z-40' : 'scale-100 z-10 opacity-80'}`}>
                   <div className={`w-10 h-10 md:w-14 md:h-14 rounded-full flex items-center justify-center font-serif text-sm md:text-xl font-bold shadow-2xl border-2 overflow-hidden ${player.team === 'A' ? 'bg-gradient-to-br from-red-900 to-red-700 border-red-400' : 'bg-gradient-to-br from-blue-900 to-blue-700 border-blue-400'} ${isActive ? 'glow-gold ring-2 ring-gold' : ''}`}>
                     {player.photo ? <img src={player.photo} className="w-full h-full object-cover"/> : player.name.charAt(0)}
                   </div>
                   <div className="absolute -bottom-4 md:-bottom-6 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur px-2 py-0.5 rounded text-[10px] md:text-xs whitespace-nowrap border border-white/10">{isMe ? 'YOU' : player.name}</div>
                 </div>
                 {isMe ? (
-                  <div className="flex flex-col items-center -space-y-12 md:-space-y-16 transition-all duration-300 pb-2 md:pb-4">
-                    <div className="flex gap-1 md:gap-2 opacity-90">{(player.faceDown || []).filter(c=>c&&c.id).map(c=><Card key={c.id} faceDown isSmall playable={isActive && player.hand.length===0 && player.faceUp.length===0} onClick={()=>playCard(c,'faceDown')}/>)}</div>
-                    <div className="flex gap-1 md:gap-2 z-10 mb-2 md:mb-4">{(player.faceUp || []).filter(c=>c&&c.id).map(c=><Card key={c.id} card={c} isSmall playable={isActive} onClick={()=>playCard(c,'faceUp')}/>)}</div>
+                  <div className="flex flex-col items-center -space-y-16 md:-space-y-24 transition-all duration-300 pb-2 md:pb-4">
+                    <div className="flex gap-2 md:gap-4 opacity-90">{(player.faceDown || []).filter(c=>c&&c.id).map(c=><Card key={c.id} faceDown isSmall playable={isActive && player.hand.length===0 && player.faceUp.length===0} onClick={()=>playCard(c,'faceDown')}/>)}</div>
+                    <div className="flex gap-2 md:gap-4 z-10 mb-8 md:mb-12">{(player.faceUp || []).filter(c=>c&&c.id).map(c=><Card key={c.id} card={c} playable={isActive} onClick={()=>playCard(c,'faceUp')}/>)}</div>
                     <div className="flex -space-x-3 md:-space-x-4 h-24 md:h-32 items-end z-20 hover:-space-x-1 transition-all">{(player.hand || []).filter(c=>c&&c.id).map((c,i)=><Card key={c.id} card={c} index={i} total={player.hand.length} playable={isActive} onClick={()=>playCard(c,'hand')}/>)}</div>
                   </div>
                 ) : (
-                  <div className="flex flex-col items-center -space-y-3 md:-space-y-4 scale-90 opacity-60">
+                  <div className="flex flex-col items-center -space-y-3 md:-space-y-4 scale-100 opacity-60">
                      <div className="flex gap-0.5 md:gap-1">{(player.faceDown || []).map((_,i)=><Card key={i} faceDown isSmall/>)}</div>
                      <div className="flex gap-0.5 md:gap-1 z-10">{(player.faceUp || []).map((c,i)=><Card key={i} card={c} isSmall/>)}</div>
                      <div className="flex gap-0.5 md:gap-1 z-20">{(player.hand || []).map((_,i)=><Card key={i} faceDown isSmall/>)}</div>
