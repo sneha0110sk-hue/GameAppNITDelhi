@@ -34,8 +34,14 @@ const styles = `
   box-shadow: -1px 1px 3px rgba(0,0,0,0.3);
   transform-style: preserve-3d;
   backface-visibility: hidden;
+  width: 100%;
+  height: 100%;
 }
-.card-hover:hover {
+.card-wrapper {
+  position: relative;
+  transform-origin: bottom center;
+}
+.card-hover:hover .card-base {
   transform: translateY(-15px) scale(1.05) !important;
   box-shadow: 0 10px 20px rgba(0,0,0,0.4);
   z-index: 50;
@@ -71,6 +77,9 @@ const styles = `
 }
 .animate-deal {
   animation: dealCard 0.4s ease-out forwards;
+  /* Ensure it's visible if animation fails or finishes */
+  opacity: 0; 
+  animation-fill-mode: forwards;
 }
 @keyframes pulse-gold {
   0% { box-shadow: 0 0 0 0 rgba(255, 215, 0, 0.4); }
@@ -107,12 +116,10 @@ const styles = `
   z-index: 100;
   animation: moveTrumpToCorner 2s cubic-bezier(0.45, 0, 0.55, 1) forwards;
   pointer-events: none;
-  /* Match final position padding */
   margin-top: 0.5rem; 
   margin-left: 1rem;
 }
 
-/* Mobile landscape optimization */
 @media (max-height: 500px) and (orientation: landscape) {
   .player-avatar { transform: scale(0.7); }
   .hand-container { bottom: -10px; }
@@ -167,6 +174,7 @@ const getSuitIcon = (suit, size = 16) => {
   }
 };
 
+// --- CARD COMPONENT (FIXED) ---
 const Card = ({ card, faceDown = false, onClick, playable = false, isSmall = false, index = 0, total = 1, dealDelay = 0 }) => {
   const rotation = total > 1 ? (index - (total - 1) / 2) * 5 : 0;
   const translateY = total > 1 ? Math.abs(index - (total - 1) / 2) * 2 : 0;
@@ -174,30 +182,37 @@ const Card = ({ card, faceDown = false, onClick, playable = false, isSmall = fal
   const smallClasses = 'w-8 h-11 md:w-12 md:h-16 text-[8px] md:text-xs';
   const normalClasses = 'w-14 h-20 md:w-20 md:h-28 text-xs md:text-base';
 
-  const animationStyle = { animationDelay: `${dealDelay}s` };
+  // Wrapper handles animation delay and opacity
+  const wrapperStyle = { 
+    animationDelay: `${dealDelay}s`,
+  };
+  
+  // Inner div handles the rotation/fanning transform
+  const innerStyle = {
+    transform: `rotate(${rotation}deg) translateY(${translateY}px)`
+  };
 
-  if (faceDown) {
-    return (
-      <div 
-        onClick={playable ? onClick : undefined} 
-        style={{ ...animationStyle, transform: `rotate(${rotation}deg) translateY(${translateY}px)` }}
-        className={`card-base card-pattern rounded-md border border-white/50 ${isSmall ? smallClasses : normalClasses} ${playable ? 'cursor-pointer card-hover ring-2 ring-yellow-400' : ''} flex items-center justify-center relative animate-deal`}
-      >
-        <div className="w-5 h-5 rounded-full bg-white/20 backdrop-blur-sm"></div>
-      </div>
-    );
-  }
-  if (!card) return <div className={`${isSmall ? smallClasses : normalClasses} border-2 border-dashed border-white/20 rounded-md`}></div>;
-  const isRed = card.suit === 'H' || card.suit === 'D';
   return (
     <div 
-      onClick={playable ? onClick : undefined} 
-      style={{ ...animationStyle, transform: `rotate(${rotation}deg) translateY(${translateY}px)` }}
-      className={`card-base bg-white rounded-md flex flex-col items-center justify-between p-1 md:p-1.5 select-none relative animate-deal ${isSmall ? smallClasses : normalClasses} ${playable ? 'cursor-pointer card-hover ring-2 md:ring-4 ring-yellow-400 z-10' : ''}`}
+      className={`card-wrapper animate-deal ${isSmall ? smallClasses : normalClasses} ${playable ? 'card-hover cursor-pointer' : ''}`} 
+      style={wrapperStyle}
+      onClick={playable ? onClick : undefined}
     >
-      <div className="self-start font-bold leading-none flex flex-col items-center"><span className={isRed ? 'text-red-600' : 'text-black'}>{card.rank}</span><div className="scale-75 origin-top">{getSuitIcon(card.suit, 10)}</div></div>
-      <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">{getSuitIcon(card.suit, isSmall ? 12 : 24)}</div>
-      <div className="self-end font-bold leading-none rotate-180 flex flex-col items-center"><span className={isRed ? 'text-red-600' : 'text-black'}>{card.rank}</span><div className="scale-75 origin-top">{getSuitIcon(card.suit, 10)}</div></div>
+      <div className="w-full h-full" style={innerStyle}>
+        {faceDown ? (
+          <div className="card-base card-pattern rounded-md border border-white/50 flex items-center justify-center relative w-full h-full">
+            <div className="w-5 h-5 rounded-full bg-white/20 backdrop-blur-sm"></div>
+          </div>
+        ) : !card ? (
+          <div className="w-full h-full border-2 border-dashed border-white/20 rounded-md"></div>
+        ) : (
+          <div className={`card-base bg-white rounded-md flex flex-col items-center justify-between p-1 md:p-1.5 select-none relative w-full h-full ${playable ? 'ring-2 md:ring-4 ring-yellow-400 z-10' : ''}`}>
+            <div className="self-start font-bold leading-none flex flex-col items-center"><span className={card.suit === 'H' || card.suit === 'D' ? 'text-red-600' : 'text-black'}>{card.rank}</span><div className="scale-75 origin-top">{getSuitIcon(card.suit, 10)}</div></div>
+            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">{getSuitIcon(card.suit, isSmall ? 12 : 24)}</div>
+            <div className="self-end font-bold leading-none rotate-180 flex flex-col items-center"><span className={card.suit === 'H' || card.suit === 'D' ? 'text-red-600' : 'text-black'}>{card.rank}</span><div className="scale-75 origin-top">{getSuitIcon(card.suit, 10)}</div></div>
+          </div>
+        )}
+      </div>
     </div>
   );
 };
@@ -269,7 +284,6 @@ function GameApp() {
   useEffect(() => {
     const currentSuit = gameState?.bid?.suit;
     if (currentSuit && currentSuit !== prevBidSuitRef.current) {
-      // New trump selected, trigger animation
       setAnimatingTrump(currentSuit);
       setTimeout(() => {
         setAnimatingTrump(null); // End animation after 2s
@@ -628,31 +642,9 @@ function GameApp() {
       <style>{styles}</style>
       <div className="game-table text-white font-sans select-none">
         <div className="absolute top-4 right-4 z-50"><button onClick={() => window.location.reload()} className="bg-black/50 hover:bg-white/10 p-2 rounded-full text-white"><RefreshCw size={20} /></button></div>
-        
-        {/* ANIMATED TRUMP CLONE */}
-        {animatingTrump && (
-          <div className="animate-trump-move">
-            <div className="bg-white rounded-full w-8 h-8 flex items-center justify-center shadow-inner border border-gold/50">
-              {getSuitIcon(animatingTrump, 20)}
-            </div>
-            <div className="text-[10px] md:text-xs mt-1 font-bold text-center text-gold bg-black/50 px-1 rounded">
-              {gameState.bid?.amount}
-            </div>
-          </div>
-        )}
-
+        {showTrumpAnim && animatingSuit && <div className="animate-trump-move"><div className="bg-white rounded-full w-8 h-8 flex items-center justify-center shadow-inner border border-gold/50">{getSuitIcon(animatingSuit, 20)}</div><div className="text-[10px] md:text-xs mt-1 font-bold text-center text-gold bg-black/50 px-1 rounded">{gameState.bid?.amount}</div></div>}
         <div className="absolute top-0 left-0 right-0 p-2 md:p-4 flex justify-between items-start z-50 pointer-events-none">
-          {/* TRUMP INDICATOR (Hidden while animating) */}
-          {bidSuit ? (
-            <div className={`glass-panel px-4 py-1 md:px-6 md:py-2 rounded-b-xl md:rounded-b-2xl -mt-2 md:-mt-4 flex flex-col items-center pointer-events-auto border-t-0 shadow-[0_10px_30px_rgba(0,0,0,0.5)] transition-opacity duration-500 ${animatingTrump ? 'opacity-0' : 'opacity-100'}`}>
-              <div className="text-gold text-[10px] md:text-xs uppercase mb-1">Master</div>
-              <div className="bg-white rounded-full w-8 h-8 md:w-10 md:h-10 flex items-center justify-center shadow-inner">{getSuitIcon(bidSuit, 20)}</div>
-              <div className="text-[10px] md:text-xs mt-1 font-bold">Bid: {gameState.bid?.amount}</div>
-            </div>
-          ) : (
-            <div className="w-16"></div>
-          )}
-          
+          {bidSuit ? <div className={`glass-panel px-4 py-1 md:px-6 md:py-2 rounded-b-xl md:rounded-b-2xl -mt-2 md:-mt-4 flex flex-col items-center pointer-events-auto border-t-0 shadow-[0_10px_30px_rgba(0,0,0,0.5)] transition-opacity duration-500 ${animatingTrump ? 'opacity-0' : 'opacity-100'}`}><div className="text-gold text-[10px] md:text-xs uppercase mb-1">Master</div><div className="bg-white rounded-full w-8 h-8 md:w-10 md:h-10 flex items-center justify-center shadow-inner">{getSuitIcon(bidSuit, 20)}</div><div className="text-[10px] md:text-xs mt-1 font-bold">Bid: {gameState.bid?.amount}</div></div> : <div className="w-16"></div>}
           <div className="glass-panel p-2 md:p-3 rounded-xl pointer-events-auto"><div className="text-[10px] md:text-xs text-gray-400 uppercase tracking-wider mb-1">Score</div><div className="flex gap-3 md:gap-6 font-serif text-sm md:text-xl"><span className="text-red-300">A: <b className="text-white">{(gameState.scores || {}).A || 0}</b></span><span className="text-blue-300">B: <b className="text-white">{(gameState.scores || {}).B || 0}</b></span></div></div>
         </div>
         <div className="absolute inset-0 flex items-center justify-center perspective-[1000px]">
@@ -681,18 +673,12 @@ function GameApp() {
               </div>
             );
           })}
-          {/* TRICK PILE - NO ROTATION (Visible to All) */}
           <div className="w-32 h-32 md:w-64 md:h-64 relative flex items-center justify-center">
             <div className="absolute inset-0 border-2 border-white/5 rounded-full animate-pulse"></div>
             {(gameState.trick || []).filter(p => p && p.card).map((play, i) => {
-              // Offset slightly so they don't perfectly overlap, but keep them UPRIGHT (readable)
-              const offsetX = (i - 2.5) * 15; 
-              const offsetY = (i - 2.5) * 5;
-              return (
-                <div key={i} className="absolute animate-deal" style={{ transform: `translate(${offsetX}px, ${offsetY}px) scale(1.2)` }}>
-                  <div className="origin-center shadow-xl"><Card card={play.card} /></div>
-                </div>
-              );
+              const relIdx = (play.playerIndex - mySeatIndex + 6) % 6;
+              const rotations = [0, -60, -120, 180, 120, 60];
+              return (<div key={i} className="absolute animate-deal" style={{ transform: `rotate(${rotations[relIdx]}deg) translateY(-40px) scale(0.8)` }}><div className="md:scale-125 origin-center"><Card card={play.card}/></div></div>);
             })}
           </div>
         </div>
