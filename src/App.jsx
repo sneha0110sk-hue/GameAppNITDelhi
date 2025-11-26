@@ -10,7 +10,7 @@ import {
   signOut 
 } from 'firebase/auth';
 import { getFirestore, doc, setDoc, getDoc, onSnapshot, updateDoc, arrayUnion, increment, runTransaction } from 'firebase/firestore';
-import { Heart, Diamond, Club, Spade, RotateCcw, Pencil, Check, X, LogOut, UserCircle, Play, Eye, EyeOff, Gavel, RefreshCw, ArrowLeftRight } from 'lucide-react';
+import { Heart, Diamond, Club, Spade, RotateCcw, Pencil, Check, X, LogOut, UserCircle, Play, Eye, EyeOff, Gavel, RefreshCw, ArrowLeftRight, Trophy } from 'lucide-react';
 
 // --- STYLES ---
 const styles = `
@@ -40,6 +40,9 @@ const styles = `
 .card-wrapper {
   position: relative;
   transform-origin: bottom center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .card-hover:hover .card-base {
   transform: translateY(-15px) scale(1.05) !important;
@@ -75,12 +78,18 @@ const styles = `
   from { opacity: 0; transform: translateY(-100px) scale(0.5); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
+/* "backwards" fill mode ensures the card is invisible (opacity 0) during the delay before animation starts */
 .animate-deal {
-  animation: dealCard 0.4s ease-out forwards;
-  /* Ensure it's visible if animation fails or finishes */
-  opacity: 0; 
-  animation-fill-mode: forwards;
+  animation: dealCard 0.4s ease-out backwards;
 }
+/* Explicitly set opacity 1 for non-animating cards */
+.no-anim {
+    opacity: 1;
+    transform: none;
+    animation: none;
+}
+
+
 @keyframes pulse-gold {
   0% { box-shadow: 0 0 0 0 rgba(255, 215, 0, 0.4); }
   70% { box-shadow: 0 0 0 10px rgba(255, 215, 0, 0); }
@@ -92,32 +101,15 @@ const styles = `
 
 /* --- TRUMP ANIMATION --- */
 @keyframes moveTrumpToCorner {
-  0% {
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%) scale(3);
-    opacity: 1;
-  }
-  40% {
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%) scale(3);
-    opacity: 1;
-  }
-  100% {
-    top: 0;
-    left: 0;
-    transform: translate(0, 0) scale(1);
-    opacity: 1;
-  }
+  0% { top: 50%; left: 50%; transform: translate(-50%, -50%) scale(3); opacity: 1; }
+  40% { top: 50%; left: 50%; transform: translate(-50%, -50%) scale(3); opacity: 1; }
+  100% { top: 0; left: 0; transform: translate(0, 0) scale(1); opacity: 1; }
 }
 .animate-trump-move {
-  position: fixed;
-  z-index: 100;
+  position: fixed; z-index: 100;
   animation: moveTrumpToCorner 2s cubic-bezier(0.45, 0, 0.55, 1) forwards;
   pointer-events: none;
-  margin-top: 0.5rem; 
-  margin-left: 1rem;
+  margin-top: 0.5rem; margin-left: 1rem;
 }
 
 @media (max-height: 500px) and (orientation: landscape) {
@@ -142,20 +134,17 @@ try {
   app = initializeApp(firebaseConfig);
   auth = getAuth(app);
   db = getFirestore(app);
-} catch (err) {
-  console.error("Firebase init error:", err);
-}
+} catch (err) { console.error("Firebase init error:", err); }
 
 const APP_ID = 'court-piece-production-v1';
 
 // --- CONSTANTS & HELPERS ---
 const SUITS = ['S', 'H', 'D', 'C'];
 const RANKS = ['3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
-const RANK_VALUES = { '3':3, '4':4, '5':5, '6':6, '7':7, '8':8, '9':9, '10':10, 'J':11, 'Q':12, 'K':13, 'A':14 };
 
 const generateDeck = () => {
   const deck = [];
-  SUITS.forEach(suit => RANKS.forEach(rank => deck.push({ suit, rank, value: RANK_VALUES[rank], id: `${rank}${suit}` })));
+  SUITS.forEach(suit => RANKS.forEach(rank => deck.push({ suit, rank, value: { '3':3, '4':4, '5':5, '6':6, '7':7, '8':8, '9':9, '10':10, 'J':11, 'Q':12, 'K':13, 'A':14 }[rank], id: `${rank}${suit}` })));
   for (let i = deck.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [deck[i], deck[j]] = [deck[j], deck[i]];
@@ -174,27 +163,36 @@ const getSuitIcon = (suit, size = 16) => {
   }
 };
 
-// --- CARD COMPONENT (FIXED) ---
-const Card = ({ card, faceDown = false, onClick, playable = false, isSmall = false, index = 0, total = 1, dealDelay = 0 }) => {
-  const rotation = total > 1 ? (index - (total - 1) / 2) * 5 : 0;
-  const translateY = total > 1 ? Math.abs(index - (total - 1) / 2) * 2 : 0;
+// --- CARD COMPONENT ---
+const Card = ({ 
+  card, 
+  faceDown = false, 
+  onClick, 
+  playable = false, 
+  isSmall = false, 
+  index = 0, 
+  total = 1, 
+  dealDelay = 0, 
+  shouldFan = true, 
+  shouldAnimate = true
+}) => {
+  
+  const rotation = shouldFan ? (total > 1 ? (index - (total - 1) / 2) * 5 : 0) : 0;
+  const translateY = shouldFan ? (total > 1 ? Math.abs(index - (total - 1) / 2) * 2 : 0) : 0;
 
   const smallClasses = 'w-8 h-11 md:w-12 md:h-16 text-[8px] md:text-xs';
   const normalClasses = 'w-14 h-20 md:w-20 md:h-28 text-xs md:text-base';
 
-  // Wrapper handles animation delay and opacity
-  const wrapperStyle = { 
-    animationDelay: `${dealDelay}s`,
-  };
+  // Wrapper handles animation delay and class
+  const wrapperStyle = shouldAnimate ? { animationDelay: `${dealDelay}s` } : {};
+  const animClass = shouldAnimate ? 'animate-deal' : 'no-anim';
   
   // Inner div handles the rotation/fanning transform
-  const innerStyle = {
-    transform: `rotate(${rotation}deg) translateY(${translateY}px)`
-  };
+  const innerStyle = { transform: `rotate(${rotation}deg) translateY(${translateY}px)` };
 
   return (
     <div 
-      className={`card-wrapper animate-deal ${isSmall ? smallClasses : normalClasses} ${playable ? 'card-hover cursor-pointer' : ''}`} 
+      className={`card-wrapper ${animClass} ${isSmall ? smallClasses : normalClasses} ${playable ? 'card-hover cursor-pointer' : ''}`} 
       style={wrapperStyle}
       onClick={playable ? onClick : undefined}
     >
@@ -247,7 +245,6 @@ function GameApp() {
   const [editingName, setEditingName] = useState('');
   const [showBidModal, setShowBidModal] = useState(false);
   
-  // ANIMATION STATES
   const [animatingTrump, setAnimatingTrump] = useState(null);
   const prevBidSuitRef = useRef(null);
 
@@ -286,7 +283,7 @@ function GameApp() {
     if (currentSuit && currentSuit !== prevBidSuitRef.current) {
       setAnimatingTrump(currentSuit);
       setTimeout(() => {
-        setAnimatingTrump(null); // End animation after 2s
+        setAnimatingTrump(null); 
       }, 2000);
     }
     prevBidSuitRef.current = currentSuit;
@@ -373,7 +370,9 @@ function GameApp() {
         players: [{ uid: user.uid, name: user.displayName || 'Player 1', photo: user.photoURL, team: 'A', seatIndex: 0, hand:[], faceUp:[], faceDown:[] }],
         deck: [], currentTurnIndex: 0, dealerIndex: 0,
         bid: { winnerIndex: null, amount: 0, suit: null, currentHighBid: 0, passedPlayers: [] },
-        trick: [], scores: { A: 0, B: 0 }
+        trick: [], 
+        scores: { A: 0, B: 0 },
+        roundWins: { A: 0, B: 0 } // Tracks hands won in current round
       });
       setGameId(newId);
     } catch (err) { alert(err.message); }
@@ -423,7 +422,7 @@ function GameApp() {
     await updateDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'games', gameId), { players: updatedPlayers });
   };
 
-  const addBot = async () => {
+  const fillWithBots = async () => {
     if (!user || !gameId || !db) return;
     setLoading(true);
     const gameRef = doc(db, 'artifacts', APP_ID, 'public', 'data', 'games', gameId);
@@ -432,20 +431,32 @@ function GameApp() {
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw "Game not found!";
         const data = gameDoc.data();
-        if ((data.players || []).length >= 6) throw "Game is full!";
+        const currentPlayers = data.players || [];
+        if (currentPlayers.length >= 6) throw "Game is full!";
         
-        const idx = data.players.length;
-        const team = idx % 2 === 0 ? 'A' : 'B';
-        const botId = `bot-${Date.now()}`;
-        const newPlayer = { 
-          uid: botId, 
-          name: `Bot ${idx+1}`, 
-          photo: null,
-          team: team, 
-          seatIndex: idx, 
-          hand:[], faceUp:[], faceDown:[] 
-        };
-        transaction.update(gameRef, { players: [...data.players, newPlayer] });
+        const botsNeeded = 6 - currentPlayers.length;
+        let countA = currentPlayers.filter(p => p.team === 'A').length;
+        
+        const newBots = [];
+        for (let i = 0; i < botsNeeded; i++) {
+            let team = 'B';
+            if (countA < 3) {
+                team = 'A';
+                countA++;
+            }
+            
+            const idx = currentPlayers.length + i;
+            newBots.push({
+                uid: `bot-${Date.now()}-${i}`, 
+                name: `Bot ${idx+1}`, 
+                photo: null,
+                team: team, 
+                seatIndex: idx, 
+                hand:[], faceUp:[], faceDown:[] 
+            });
+        }
+        
+        transaction.update(gameRef, { players: [...currentPlayers, ...newBots] });
       });
     } catch (err) { alert(err); }
     setLoading(false);
@@ -474,7 +485,37 @@ function GameApp() {
     });
 
     await updateDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'games', gameId), {
-      status: 'BIDDING', players: seatedPlayers, currentTurnIndex: 0, 'bid.currentHighBid': 0
+      status: 'BIDDING', 
+      players: seatedPlayers, 
+      currentTurnIndex: 0, 
+      'bid.currentHighBid': 0,
+      roundWins: { A: 0, B: 0 } // Reset round score
+    });
+  };
+
+  const startNextRound = async () => {
+    // Same as startGame but we skip re-seating to keep current positions
+    const deck = generateDeck();
+    const players = [...gameState.players];
+    players.forEach((p, i) => {
+      const s = i * 8;
+      p.faceDown = deck.slice(s, s+3); p.faceUp = deck.slice(s+3, s+6); p.hand = deck.slice(s+6, s+8);
+    });
+    
+    // Winner of previous game (or next dealer) logic could go here. For now, rotate dealer.
+    const nextDealer = (gameState.dealerIndex + 1) % 6;
+
+    await updateDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'games', gameId), {
+      status: 'BIDDING', 
+      players: players, 
+      currentTurnIndex: nextDealer, 
+      dealerIndex: nextDealer,
+      'bid.currentHighBid': 0,
+      'bid.suit': null,
+      'bid.winnerIndex': null,
+      'bid.passedPlayers': [],
+      roundWins: { A: 0, B: 0 },
+      trick: []
     });
   };
 
@@ -526,6 +567,7 @@ function GameApp() {
     let updates = { [`players.${playingIndex}`]: up, trick: nt, currentTurnIndex: (gameState.currentTurnIndex + 1) % 6 };
     
     if (nt.length === 6) {
+      // Resolve Trick
       let widx = 0, wcard = nt[0].card, trump = gameState.bid?.suit;
       for (let i=1; i<6; i++) {
         const nc = nt[i].card;
@@ -533,9 +575,48 @@ function GameApp() {
         else if (nc.suit === wcard.suit && nc.value > wcard.value) { wcard = nc; widx = i; }
       }
       const winPid = nt[widx].playerIndex;
-      updates[`scores.${gameState.players[winPid].team}`] = increment(1);
+      const winTeam = gameState.players[winPid].team;
+      
+      // Update Round Score
+      const newRoundWins = { ...(gameState.roundWins || {A:0, B:0}) };
+      newRoundWins[winTeam] = (newRoundWins[winTeam] || 0) + 1;
+      updates['roundWins'] = newRoundWins;
       updates['trick'] = [];
       updates['currentTurnIndex'] = winPid;
+
+      // CHECK ROUND END (8 Tricks)
+      const totalTricks = (newRoundWins.A || 0) + (newRoundWins.B || 0);
+      if (totalTricks >= 8) {
+         // Calculate Game Score Logic
+         const biddingTeamIndex = gameState.bid?.winnerIndex;
+         const biddingTeam = gameState.players[biddingTeamIndex].team;
+         const opposingTeam = biddingTeam === 'A' ? 'B' : 'A';
+         const target = gameState.bid?.amount || 5;
+         const won = newRoundWins[biddingTeam];
+
+         let scoreDelta = 0;
+         let teamToDeduct = '';
+
+         if (won >= target) {
+            // Bidder Won
+            scoreDelta = target; // "score of opposing team get previous - number"
+            teamToDeduct = opposingTeam;
+         } else {
+            // Bidder Lost
+            if (target > 5) {
+                scoreDelta = 2 * target; // "score become prev - 2*bid"
+                teamToDeduct = biddingTeam;
+            } else {
+                scoreDelta = 5; // "score becomes previous - 5"
+                teamToDeduct = biddingTeam;
+            }
+         }
+         
+         // Apply to global scores (negative score as per rule "prev - X")
+         updates[`scores.${teamToDeduct}`] = increment(-scoreDelta);
+         updates['status'] = 'ROUND_OVER';
+         updates['lastRoundResult'] = { winner: won >= target ? biddingTeam : opposingTeam, delta: scoreDelta, deductedFrom: teamToDeduct };
+      }
     }
     await updateDoc(ref, updates);
   };
@@ -611,7 +692,7 @@ function GameApp() {
                   ))}
                 </div>
                 {gameState.hostId === user.uid ? (
-                  <div className="flex flex-col gap-2"><button disabled={(gameState.players || []).length>=6} onClick={addBot} className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-gray-600 disabled:opacity-50 text-white font-bold py-2 rounded shadow flex justify-center gap-2 items-center"><UserCircle size={20}/> Add Bot</button><button disabled={(gameState.players || []).length<6} onClick={startGame} className="w-full bg-green-600 disabled:bg-gray-600 py-3 rounded font-bold shadow-lg text-sm md:text-base flex justify-center gap-2"><Play size={20}/> START GAME ({(gameState.players || []).length}/6)</button></div>
+                  <div className="flex flex-col gap-2"><button disabled={(gameState.players || []).length>=6} onClick={fillWithBots} className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-gray-600 disabled:opacity-50 text-white font-bold py-2 rounded shadow flex justify-center gap-2 items-center"><UserCircle size={20}/> Fill with Bots</button><button disabled={(gameState.players || []).length<6} onClick={startGame} className="w-full bg-green-600 disabled:bg-gray-600 py-3 rounded font-bold shadow-lg text-sm md:text-base flex justify-center gap-2"><Play size={20}/> START GAME ({(gameState.players || []).length}/6)</button></div>
                 ) : (
                   <div className="text-yellow-400 animate-pulse text-sm">Waiting for Host to Start...</div>
                 )}
@@ -642,11 +723,23 @@ function GameApp() {
       <style>{styles}</style>
       <div className="game-table text-white font-sans select-none">
         <div className="absolute top-4 right-4 z-50"><button onClick={() => window.location.reload()} className="bg-black/50 hover:bg-white/10 p-2 rounded-full text-white"><RefreshCw size={20} /></button></div>
-        {showTrumpAnim && animatingSuit && <div className="animate-trump-move"><div className="bg-white rounded-full w-8 h-8 flex items-center justify-center shadow-inner border border-gold/50">{getSuitIcon(animatingSuit, 20)}</div><div className="text-[10px] md:text-xs mt-1 font-bold text-center text-gold bg-black/50 px-1 rounded">{gameState.bid?.amount}</div></div>}
+        
+        {/* TRUMP ANIMATION */}
+        {animatingTrump && <div className="animate-trump-move"><div className="bg-white rounded-full w-8 h-8 flex items-center justify-center shadow-inner border border-gold/50">{getSuitIcon(animatingTrump, 20)}</div><div className="text-[10px] md:text-xs mt-1 font-bold text-center text-gold bg-black/50 px-1 rounded">{gameState.bid?.amount}</div></div>}
+        
         <div className="absolute top-0 left-0 right-0 p-2 md:p-4 flex justify-between items-start z-50 pointer-events-none">
           {bidSuit ? <div className={`glass-panel px-4 py-1 md:px-6 md:py-2 rounded-b-xl md:rounded-b-2xl -mt-2 md:-mt-4 flex flex-col items-center pointer-events-auto border-t-0 shadow-[0_10px_30px_rgba(0,0,0,0.5)] transition-opacity duration-500 ${animatingTrump ? 'opacity-0' : 'opacity-100'}`}><div className="text-gold text-[10px] md:text-xs uppercase mb-1">Master</div><div className="bg-white rounded-full w-8 h-8 md:w-10 md:h-10 flex items-center justify-center shadow-inner">{getSuitIcon(bidSuit, 20)}</div><div className="text-[10px] md:text-xs mt-1 font-bold">Bid: {gameState.bid?.amount}</div></div> : <div className="w-16"></div>}
-          <div className="glass-panel p-2 md:p-3 rounded-xl pointer-events-auto"><div className="text-[10px] md:text-xs text-gray-400 uppercase tracking-wider mb-1">Score</div><div className="flex gap-3 md:gap-6 font-serif text-sm md:text-xl"><span className="text-red-300">A: <b className="text-white">{(gameState.scores || {}).A || 0}</b></span><span className="text-blue-300">B: <b className="text-white">{(gameState.scores || {}).B || 0}</b></span></div></div>
+          <div className="glass-panel p-2 md:p-3 rounded-xl pointer-events-auto">
+            <div className="text-[10px] md:text-xs text-gray-400 uppercase tracking-wider mb-1">Score / Round</div>
+            <div className="flex gap-4 font-serif text-sm md:text-base">
+              <span className="text-red-300 flex flex-col items-center leading-tight"><span className="text-[10px]">A Score</span><b className="text-white">{(gameState.scores || {}).A || 0}</b></span>
+              <span className="text-red-400 flex flex-col items-center leading-tight border-r border-white/20 pr-2 mr-2"><span className="text-[10px]">Tricks</span><b className="text-white">{(gameState.roundWins || {}).A || 0}</b></span>
+              <span className="text-blue-400 flex flex-col items-center leading-tight border-l border-white/20 pl-2 ml-2"><span className="text-[10px]">Tricks</span><b className="text-white">{(gameState.roundWins || {}).B || 0}</b></span>
+              <span className="text-blue-300 flex flex-col items-center leading-tight"><span className="text-[10px]">B Score</span><b className="text-white">{(gameState.scores || {}).B || 0}</b></span>
+            </div>
+          </div>
         </div>
+
         <div className="absolute inset-0 flex items-center justify-center perspective-[1000px]">
           {([0, 1, 2, 3, 4, 5]).map(offset => {
             const player = getPlayer(offset);
@@ -654,34 +747,80 @@ function GameApp() {
             const isMe = offset === 0;
             const isActive = gameState.currentTurnIndex === player.seatIndex;
             const dealDelay = (player.seatIndex * 8) * 0.05;
+            const shouldAnimate = gameState.status === 'BIDDING';
             return (
               <div key={offset} className={`absolute ${positions[offset]} flex flex-col items-center transition-all duration-500`}>
                 <div className={`relative mb-2 md:mb-4 transition-all duration-300 ${isActive ? 'scale-110 md:scale-125 z-40' : 'scale-100 z-10 opacity-80'}`}><div className={`w-10 h-10 md:w-14 md:h-14 rounded-full flex items-center justify-center font-serif text-sm md:text-xl font-bold shadow-2xl border-2 overflow-hidden ${player.team === 'A' ? 'bg-gradient-to-br from-red-900 to-red-700 border-red-400' : 'bg-gradient-to-br from-blue-900 to-blue-700 border-blue-400'} ${isActive ? 'glow-gold ring-2 ring-gold' : ''}`}>{player.photo ? <img src={player.photo} className="w-full h-full object-cover"/> : player.name.charAt(0)}</div><div className="absolute -bottom-4 md:-bottom-6 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur px-2 py-0.5 rounded text-[10px] md:text-xs whitespace-nowrap border border-white/10">{isMe ? 'YOU' : player.name}</div></div>
                 {isMe ? (
-                  <div className="flex flex-col items-center -space-y-16 md:-space-y-24 transition-all duration-300 pb-2 md:pb-4">
-                    <div className="flex gap-2 md:gap-4 opacity-90 mb-8">{(player.faceDown || []).filter(c=>c&&c.id).map((c,i)=><Card key={c.id} dealDelay={dealDelay + i*0.05} faceDown isSmall playable={isActive && player.hand.length===0 && player.faceUp.length===0} onClick={()=>playCard(c,'faceDown')}/>)}</div>
-                    <div className="flex gap-2 md:gap-4 z-10 mb-8 md:mb-12">{(player.faceUp || []).filter(c=>c&&c.id).map((c,i)=><Card key={c.id} dealDelay={dealDelay + 3*0.05 + i*0.05} card={c} playable={isActive} onClick={()=>playCard(c,'faceUp')}/>)}</div>
-                    <div className="flex -space-x-3 md:-space-x-4 h-24 md:h-32 items-end z-20 hover:-space-x-1 transition-all">{(player.hand || []).filter(c=>c&&c.id).map((c,i)=><Card key={c.id} dealDelay={dealDelay + 6*0.05 + i*0.05} card={c} index={i} total={player.hand.length} playable={isActive} onClick={()=>playCard(c,'hand')}/>)}</div>
+                  <div className="flex flex-col items-center -space-y-16 md:-space-y-24 transition-all duration-300 pb-2 md:pb-4 z-50">
+                    <div className="flex gap-2 md:gap-4 opacity-90 mb-8">{(player.faceDown || []).filter(c=>c&&c.id).map((c,i)=><Card key={c.id} dealDelay={dealDelay + i*0.05} faceDown isSmall playable={isActive && player.hand.length===0 && player.faceUp.length===0} onClick={()=>playCard(c,'faceDown')} shouldAnimate={shouldAnimate}/>)}</div>
+                    <div className="flex gap-2 md:gap-4 z-10 mb-8 md:mb-12">{(player.faceUp || []).filter(c=>c&&c.id).map((c,i)=><Card key={c.id} dealDelay={dealDelay + 3*0.05 + i*0.05} card={c} playable={isActive} onClick={()=>playCard(c,'faceUp')} shouldAnimate={shouldAnimate}/>)}</div>
+                    <div className="flex -space-x-3 md:-space-x-4 h-24 md:h-32 items-end z-20 hover:-space-x-1 transition-all">{(player.hand || []).filter(c=>c&&c.id).map((c,i)=><Card key={c.id} dealDelay={dealDelay + 6*0.05 + i*0.05} card={c} index={i} total={player.hand.length} playable={isActive} onClick={()=>playCard(c,'hand')} shouldAnimate={shouldAnimate}/>)}</div>
                   </div>
                 ) : (
                   <div className="flex flex-col items-center -space-y-3 md:-space-y-4 scale-100 opacity-60">
-                     <div className="flex gap-0.5 md:gap-1">{(player.faceDown || []).map((_,i)=><Card key={i} dealDelay={dealDelay + i*0.05} faceDown isSmall/>)}</div>
-                     <div className="flex gap-0.5 md:gap-1 z-10">{(player.faceUp || []).map((c,i)=><Card key={i} dealDelay={dealDelay + 3*0.05 + i*0.05} card={c} isSmall/>)}</div>
-                     <div className="flex gap-0.5 md:gap-1 z-20">{(player.hand || []).map((_,i)=><Card key={i} dealDelay={dealDelay + 6*0.05 + i*0.05} faceDown isSmall/>)}</div>
+                     <div className="flex gap-0.5 md:gap-1">{(player.faceDown || []).map((_,i)=><Card key={i} dealDelay={dealDelay + i*0.05} faceDown isSmall shouldAnimate={shouldAnimate}/>)}</div>
+                     <div className="flex gap-0.5 md:gap-1 z-10">{(player.faceUp || []).map((c,i)=><Card key={i} dealDelay={dealDelay + 3*0.05 + i*0.05} card={c} isSmall shouldAnimate={shouldAnimate}/>)}</div>
+                     <div className="flex gap-0.5 md:gap-1 z-20">{(player.hand || []).map((_,i)=><Card key={i} dealDelay={dealDelay + 6*0.05 + i*0.05} faceDown isSmall shouldAnimate={shouldAnimate}/>)}</div>
                   </div>
                 )}
               </div>
             );
           })}
-          <div className="w-32 h-32 md:w-64 md:h-64 relative flex items-center justify-center">
-            <div className="absolute inset-0 border-2 border-white/5 rounded-full animate-pulse"></div>
-            {(gameState.trick || []).filter(p => p && p.card).map((play, i) => {
-              const relIdx = (play.playerIndex - mySeatIndex + 6) % 6;
-              const rotations = [0, -60, -120, 180, 120, 60];
-              return (<div key={i} className="absolute animate-deal" style={{ transform: `rotate(${rotations[relIdx]}deg) translateY(-40px) scale(0.8)` }}><div className="md:scale-125 origin-center"><Card card={play.card}/></div></div>);
-            })}
+          {/* TRICK PILE */}
+          <div className="w-full h-full absolute inset-0 pointer-events-none flex items-center justify-center">
+            <div className="w-32 h-32 relative">
+              <div className="absolute inset-0 border-2 border-white/5 rounded-full animate-pulse"></div>
+              {(gameState.trick || []).filter(p => p && p.card).map((play, i) => {
+                const offsetX = (i * 4) - 10; 
+                const offsetY = (i * 2) - 5;
+                return (
+                  <div 
+                    key={i} 
+                    className="absolute transition-all duration-300 ease-out" 
+                    style={{ 
+                      transform: `translate(${offsetX}px, ${offsetY}px) scale(1.2)`,
+                      zIndex: i
+                    }}
+                  >
+                    <div className="origin-center shadow-xl">
+                      <Card card={play.card} shouldFan={false} shouldAnimate={false} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
+
+        {/* ROUND OVER UI */}
+        {gameState.status === 'ROUND_OVER' && (
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 animate-in fade-in p-4">
+            <div className="glass-panel p-8 rounded-2xl text-center border-gold border-2 max-w-md w-full">
+              <div className="flex justify-center mb-4 text-gold"><Trophy size={64} /></div>
+              <h2 className="text-3xl font-serif text-white mb-2">Round Complete!</h2>
+              <div className="text-xl mb-6">
+                {gameState.lastRoundResult?.delta > 0 ? (
+                  <span className="text-green-400 font-bold">Winner: Team {gameState.lastRoundResult?.winner}</span>
+                ) : (
+                  <span className="text-gray-400">Round Draw?</span>
+                )}
+              </div>
+              <div className="bg-black/50 p-4 rounded-lg mb-6 text-sm text-gray-300">
+                <p>Bid was {gameState.bid?.amount} ({gameState.bid?.suit}).</p>
+                <p className="mt-2 text-red-400">
+                  {gameState.lastRoundResult?.deductedFrom} lost <b>{gameState.lastRoundResult?.delta}</b> points.
+                </p>
+              </div>
+              {gameState.hostId === user.uid ? (
+                <button onClick={startNextRound} className="w-full bg-gold text-black font-bold py-3 rounded-lg hover:scale-105 transition">Start Next Round</button>
+              ) : (
+                <div className="text-sm text-gray-400 animate-pulse">Waiting for Host...</div>
+              )}
+            </div>
+          </div>
+        )}
+        
         {gameState.status === 'BIDDING' && isMyTurn && !bidSuit && (
           <>
             {!showBidModal ? (
@@ -705,4 +844,4 @@ function GameApp() {
   );
 }
 
-export default function AppWithBoundary() { return <ErrorBoundary><GameApp /></ErrorBoundary>; }
+export default function AppWithBoundary() { return <ErrorBoundary><GameApp /></ErrorBoundary>; 
