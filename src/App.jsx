@@ -222,16 +222,10 @@ export default function App() {
       await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw "Game not found! Check code.";
-        
         const data = gameDoc.data();
         
-        // Logic Check: Are we already in the list?
-        const existingPlayer = data.players.find(p => p.uid === user.uid);
-        if (existingPlayer) {
-          // We are already in! This isn't an error, just a notification.
-          throw "ALREADY_JOINED"; 
-        }
-
+        // Check if already in list
+        if (data.players.some(p => p.uid === user.uid)) throw "ALREADY_JOINED";
         if (data.players.length >= 6) throw "Game Full!";
         
         const idx = data.players.length;
@@ -246,13 +240,9 @@ export default function App() {
         transaction.update(gameRef, { players: [...data.players, newPlayer] });
       });
     } catch (err) { 
-      if (err === "ALREADY_JOINED") {
-        alert("You are already in this game!");
-      } else if (typeof err === 'string') {
-        alert(err);
-      } else {
-        alert("Connection Error: " + err.message); 
-      }
+      if (err === "ALREADY_JOINED") alert("You are already in this game!");
+      else if (typeof err === 'string') alert(err);
+      else alert("Connection Error: " + err.message); 
     }
     setLoading(false);
   };
@@ -296,26 +286,29 @@ export default function App() {
     });
   };
 
-  // Game logic functions...
+  // Game logic functions
   const updatePlayerName = async () => {
     if (!user || !gameId || !editingName.trim()) return;
     const updatedPlayers = gameState.players.map(p => p.uid === user.uid ? { ...p, name: editingName.trim() } : p);
     await updateDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'games', gameId), { players: updatedPlayers });
     setIsEditingName(false);
   };
+  
   const makeBid = async (a) => {
     const ref = doc(db, 'artifacts', APP_ID, 'public', 'data', 'games', gameId);
     const myIndex = mySeatIndex;
     if (a === 0) {
-      const passed = [...(gameState.bid.passedPlayers || []), myIndex];
+      const passed = [...(gameState.bid?.passedPlayers || []), myIndex];
       let updates = { 'bid.passedPlayers': passed, currentTurnIndex: (gameState.currentTurnIndex + 1) % 6 };
-      if (passed.length === 5 && gameState.bid.currentHighBid > 0) {
+      if (passed.length === 5 && (gameState.bid?.currentHighBid || 0) > 0) {
         updates['bid.winnerIndex'] = gameState.bid.currentHighBidder; updates['bid.amount'] = gameState.bid.currentHighBid;
       } else if (passed.length === 6) { updates['bid.winnerIndex'] = gameState.dealerIndex; updates['bid.amount'] = 5; }
       await updateDoc(ref, updates);
     } else { await updateDoc(ref, { 'bid.currentHighBid': a, 'bid.currentHighBidder': myIndex, currentTurnIndex: (gameState.currentTurnIndex + 1) % 6 }); }
   };
+  
   const selectMasterSuit = async (s) => await updateDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'games', gameId), { 'bid.suit': s, status: 'PLAYING', currentTurnIndex: gameState.bid.winnerIndex });
+  
   const playCard = async (c, s) => {
     const ref = doc(db, 'artifacts', APP_ID, 'public', 'data', 'games', gameId);
     const myIdx = mySeatIndex;
@@ -329,7 +322,7 @@ export default function App() {
     const nt = [...gameState.trick, { card: c, playerIndex: myIdx }];
     let updates = { [`players.${myIdx}`]: up, trick: nt, currentTurnIndex: (gameState.currentTurnIndex + 1) % 6 };
     if (nt.length === 6) {
-      let widx = 0, wcard = nt[0].card, trump = gameState.bid.suit;
+      let widx = 0, wcard = nt[0].card, trump = gameState.bid?.suit;
       for (let i=1; i<6; i++) {
         const nc = nt[i].card;
         if (nc.suit === trump && wcard.suit !== trump) { wcard = nc; widx = i; }
@@ -384,7 +377,7 @@ export default function App() {
               </div>
             )}
 
-            {/* 2. JOIN BUTTON (This was failing before due to UI state) */}
+            {/* 2. JOIN BUTTON */}
             {gameState && !amIJoined && (
               <div className="space-y-4 animate-in fade-in">
                 <div className="bg-black/40 p-4 rounded-xl border border-green-500/50">
@@ -429,7 +422,7 @@ export default function App() {
                 {gameState.hostId === user.uid ? (
                   <div className="flex flex-col gap-2">
                     <button disabled={gameState.players.length>=6} onClick={addBot} className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-gray-600 disabled:opacity-50 text-white font-bold py-2 rounded shadow flex justify-center gap-2 items-center">
-                      <Bot size={20}/> Add Bot
+                      <UserCircle size={20}/> Add Bot
                     </button>
                     <button disabled={gameState.players.length<6} onClick={startGame} className="w-full bg-green-600 disabled:bg-gray-600 py-3 rounded font-bold shadow-lg text-sm md:text-base flex justify-center gap-2"><Play size={20}/> START GAME ({gameState.players.length}/6)</button>
                   </div>
@@ -454,6 +447,11 @@ export default function App() {
     "bottom-28 left-0 md:bottom-32 md:left-8 scale-75 md:scale-100 origin-bottom-left" // P5
   ];
 
+  // Safe Accessors
+  const currentBid = gameState.bid?.currentHighBid || 0;
+  const bidSuit = gameState.bid?.suit;
+  const winnerIndex = gameState.bid?.winnerIndex;
+
   return (
     <>
       <style>{styles}</style>
@@ -466,11 +464,11 @@ export default function App() {
               <span className="text-blue-300">B: <b className="text-white">{(gameState.scores || {}).B || 0}</b></span>
             </div>
           </div>
-          {gameState.bid.suit && (
+          {bidSuit && (
             <div className="glass-panel px-4 py-1 md:px-6 md:py-2 rounded-b-xl md:rounded-b-2xl -mt-2 md:-mt-4 flex flex-col items-center pointer-events-auto border-t-0 shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
               <div className="text-gold text-[10px] md:text-xs uppercase mb-1">Master</div>
-              <div className="bg-white rounded-full w-8 h-8 md:w-10 md:h-10 flex items-center justify-center shadow-inner">{getSuitIcon(gameState.bid.suit, 20)}</div>
-              <div className="text-[10px] md:text-xs mt-1 font-bold">Bid: {gameState.bid.amount}</div>
+              <div className="bg-white rounded-full w-8 h-8 md:w-10 md:h-10 flex items-center justify-center shadow-inner">{getSuitIcon(bidSuit, 20)}</div>
+              <div className="text-[10px] md:text-xs mt-1 font-bold">Bid: {gameState.bid?.amount}</div>
             </div>
           )}
         </div>
@@ -490,9 +488,9 @@ export default function App() {
                 </div>
                 {isMe ? (
                   <div className="flex flex-col items-center -space-y-12 md:-space-y-16 transition-all duration-300 pb-2 md:pb-4">
-                    <div className="flex gap-1 md:gap-2 opacity-90">{(player.faceDown || []).map(c=><Card key={c.id} faceDown isSmall playable={isActive && player.hand.length===0 && player.faceUp.length===0} onClick={()=>playCard(c,'faceDown')}/>)}</div>
-                    <div className="flex gap-1 md:gap-2 z-10 mb-2 md:mb-4">{(player.faceUp || []).map(c=><Card key={c.id} card={c} isSmall playable={isActive} onClick={()=>playCard(c,'faceUp')}/>)}</div>
-                    <div className="flex -space-x-3 md:-space-x-4 h-24 md:h-32 items-end z-20 hover:-space-x-1 transition-all">{(player.hand || []).map((c,i)=><Card key={c.id} card={c} index={i} total={player.hand.length} playable={isActive} onClick={()=>playCard(c,'hand')}/>)}</div>
+                    <div className="flex gap-1 md:gap-2 opacity-90">{(player.faceDown || []).filter(c=>c&&c.id).map(c=><Card key={c.id} faceDown isSmall playable={isActive && player.hand.length===0 && player.faceUp.length===0} onClick={()=>playCard(c,'faceDown')}/>)}</div>
+                    <div className="flex gap-1 md:gap-2 z-10 mb-2 md:mb-4">{(player.faceUp || []).filter(c=>c&&c.id).map(c=><Card key={c.id} card={c} isSmall playable={isActive} onClick={()=>playCard(c,'faceUp')}/>)}</div>
+                    <div className="flex -space-x-3 md:-space-x-4 h-24 md:h-32 items-end z-20 hover:-space-x-1 transition-all">{(player.hand || []).filter(c=>c&&c.id).map((c,i)=><Card key={c.id} card={c} index={i} total={player.hand.length} playable={isActive} onClick={()=>playCard(c,'hand')}/>)}</div>
                   </div>
                 ) : (
                   <div className="flex flex-col items-center -space-y-3 md:-space-y-4 scale-90 opacity-60">
@@ -506,20 +504,20 @@ export default function App() {
           })}
           <div className="w-32 h-32 md:w-64 md:h-64 relative flex items-center justify-center">
             <div className="absolute inset-0 border-2 border-white/5 rounded-full animate-pulse"></div>
-            {(gameState.trick || []).map((play, i) => {
+            {(gameState.trick || []).filter(p => p && p.card).map((play, i) => {
               const relIdx = (play.playerIndex - mySeatIndex + 6) % 6;
               const rotations = [0, -60, -120, 180, 120, 60];
               return (<div key={i} className="absolute animate-deal" style={{ transform: `rotate(${rotations[relIdx]}deg) translateY(-40px) scale(0.8)` }}><div className="md:scale-125 origin-center"><Card card={play.card}/></div></div>);
             })}
           </div>
         </div>
-        {gameState.status === 'BIDDING' && isActive && !gameState.bid.suit && (
+        {gameState.status === 'BIDDING' && isActive && !bidSuit && (
           <div className="absolute inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in p-4">
             <div className="glass-panel p-4 md:p-8 rounded-2xl text-center border-gold border-2 max-w-sm w-full">
-              {gameState.bid.winnerIndex === mySeatIndex ? (
+              {winnerIndex === mySeatIndex ? (
                  <div><h2 className="text-xl md:text-3xl font-serif text-gold mb-4 md:mb-6">Choose Master Suit</h2><div className="flex gap-2 md:gap-4 justify-center">{SUITS.map(s=><button key={s} onClick={()=>selectMasterSuit(s)} className="bg-white p-2 md:p-4 rounded-xl hover:scale-110 transition shadow-lg">{getSuitIcon(s,32)}</button>)}</div></div>
               ) : (
-                <div><h2 className="text-xl md:text-2xl font-serif mb-2">Place Bid</h2><div className="text-gold mb-4 md:mb-6">Current High: {gameState.bid.currentHighBid}</div><div className="grid grid-cols-4 gap-2 mb-4">{[5,6,7,8].map(n=><button key={n} disabled={n<=gameState.bid.currentHighBid} onClick={()=>makeBid(n)} className="bg-gold text-black font-bold py-2 md:py-3 rounded hover:bg-yellow-300 disabled:opacity-20 transition">{n}</button>)}</div><button onClick={()=>makeBid(0)} className="w-full bg-white/10 hover:bg-red-900/50 py-2 md:py-3 rounded text-red-300 border border-red-900/30">PASS</button></div>
+                <div><h2 className="text-xl md:text-2xl font-serif mb-2">Place Bid</h2><div className="text-gold mb-4 md:mb-6">Current High: {currentBid}</div><div className="grid grid-cols-4 gap-2 mb-4">{[5,6,7,8].map(n=><button key={n} disabled={n<=currentBid} onClick={()=>makeBid(n)} className="bg-gold text-black font-bold py-2 md:py-3 rounded hover:bg-yellow-300 disabled:opacity-20 transition">{n}</button>)}</div><button onClick={()=>makeBid(0)} className="w-full bg-white/10 hover:bg-red-900/50 py-2 md:py-3 rounded text-red-300 border border-red-900/30">PASS</button></div>
               )}
             </div>
           </div>
