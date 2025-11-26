@@ -10,7 +10,8 @@ import {
   signOut 
 } from 'firebase/auth';
 import { getFirestore, doc, setDoc, getDoc, onSnapshot, updateDoc, arrayUnion, increment, runTransaction } from 'firebase/firestore';
-import { Heart, Diamond, Club, Spade, RotateCcw, Pencil, Check, X, LogOut, UserCircle, Play, Bot } from 'lucide-react';
+// Removed 'Bot' to prevent version crashes, using UserCircle instead
+import { Heart, Diamond, Club, Spade, RotateCcw, Pencil, Check, X, LogOut, UserCircle, Play } from 'lucide-react';
 
 // --- STYLES ---
 const styles = `
@@ -159,8 +160,33 @@ const Card = ({ card, faceDown = false, onClick, playable = false, isSmall = fal
   );
 };
 
-// --- MAIN APP COMPONENT ---
-export default function App() {
+// --- ERROR BOUNDARY ---
+// This prevents the "White Screen of Death" by catching errors
+class ErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { hasError: false, error: null }; }
+  static getDerivedStateFromError(error) { return { hasError: true, error }; }
+  componentDidCatch(error, errorInfo) { console.error("Crash:", error, errorInfo); }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-red-900 text-white flex flex-col items-center justify-center p-4 text-center">
+          <h1 className="text-3xl font-bold mb-4">Game Crashed</h1>
+          <p className="mb-4">Don't worry, you can reset it.</p>
+          <div className="bg-black/50 p-4 rounded mb-6 text-xs font-mono text-left max-w-md overflow-auto">
+            {this.state.error?.toString()}
+          </div>
+          <button onClick={() => window.location.reload()} className="bg-white text-red-900 px-6 py-3 rounded font-bold shadow-lg hover:bg-gray-200">
+            Reload Game
+          </button>
+        </div>
+      );
+    }
+    return this.props.children; 
+  }
+}
+
+// --- GAME COMPONENT ---
+function GameApp() {
   const [user, setUser] = useState(null);
   const [gameId, setGameId] = useState('');
   const [gameState, setGameState] = useState(null);
@@ -224,7 +250,6 @@ export default function App() {
         if (!gameDoc.exists()) throw "Game not found! Check code.";
         const data = gameDoc.data();
         
-        // Check if already in list
         if (data.players.some(p => p.uid === user.uid)) throw "ALREADY_JOINED";
         if (data.players.length >= 6) throw "Game Full!";
         
@@ -524,5 +549,13 @@ export default function App() {
         )}
       </div>
     </>
+  );
+}
+
+export default function AppWithBoundary() {
+  return (
+    <ErrorBoundary>
+      <GameApp />
+    </ErrorBoundary>
   );
 }
