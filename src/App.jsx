@@ -137,9 +137,9 @@ const Card = ({ card, faceDown = false, onClick, playable = false, isSmall = fal
   const rotation = total > 1 ? (index - (total - 1) / 2) * 5 : 0;
   const translateY = total > 1 ? Math.abs(index - (total - 1) / 2) * 2 : 0;
 
-  // Large card sizes for visibility
-  const smallClasses = 'w-12 h-16 md:w-16 md:h-24 text-[10px] md:text-sm';
-  const normalClasses = 'w-20 h-28 md:w-28 md:h-40 text-sm md:text-lg';
+  // REVERTED SIZES: Back to a balanced standard size to prevent overlap
+  const smallClasses = 'w-8 h-11 md:w-12 md:h-16 text-[8px] md:text-xs';
+  const normalClasses = 'w-14 h-20 md:w-20 md:h-28 text-xs md:text-base';
 
   const animationStyle = { animationDelay: `${dealDelay}s` };
 
@@ -150,7 +150,7 @@ const Card = ({ card, faceDown = false, onClick, playable = false, isSmall = fal
         style={{ ...animationStyle, transform: `rotate(${rotation}deg) translateY(${translateY}px)` }}
         className={`card-base card-pattern rounded-md border border-white/50 ${isSmall ? smallClasses : normalClasses} ${playable ? 'cursor-pointer card-hover ring-2 ring-yellow-400' : ''} flex items-center justify-center relative animate-deal`}
       >
-        <div className="w-6 h-6 rounded-full bg-white/20 backdrop-blur-sm"></div>
+        <div className="w-5 h-5 rounded-full bg-white/20 backdrop-blur-sm"></div>
       </div>
     );
   }
@@ -160,10 +160,10 @@ const Card = ({ card, faceDown = false, onClick, playable = false, isSmall = fal
     <div 
       onClick={playable ? onClick : undefined} 
       style={{ ...animationStyle, transform: `rotate(${rotation}deg) translateY(${translateY}px)` }}
-      className={`card-base bg-white rounded-md flex flex-col items-center justify-between p-1 md:p-2 select-none relative animate-deal ${isSmall ? smallClasses : normalClasses} ${playable ? 'cursor-pointer card-hover ring-2 md:ring-4 ring-yellow-400 z-10' : ''}`}
+      className={`card-base bg-white rounded-md flex flex-col items-center justify-between p-1 md:p-1.5 select-none relative animate-deal ${isSmall ? smallClasses : normalClasses} ${playable ? 'cursor-pointer card-hover ring-2 md:ring-4 ring-yellow-400 z-10' : ''}`}
     >
       <div className="self-start font-bold leading-none flex flex-col items-center"><span className={isRed ? 'text-red-600' : 'text-black'}>{card.rank}</span><div className="scale-75 origin-top">{getSuitIcon(card.suit, 10)}</div></div>
-      <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">{getSuitIcon(card.suit, isSmall ? 16 : 32)}</div>
+      <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">{getSuitIcon(card.suit, isSmall ? 12 : 24)}</div>
       <div className="self-end font-bold leading-none rotate-180 flex flex-col items-center"><span className={isRed ? 'text-red-600' : 'text-black'}>{card.rank}</span><div className="scale-75 origin-top">{getSuitIcon(card.suit, 10)}</div></div>
     </div>
   );
@@ -526,14 +526,9 @@ function GameApp() {
                   <div className="absolute -bottom-4 md:-bottom-6 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur px-2 py-0.5 rounded text-[10px] md:text-xs whitespace-nowrap border border-white/10">{isMe ? 'YOU' : player.name}</div>
                 </div>
                 {isMe ? (
-                  <div className="flex flex-col items-center -space-y-24 md:-space-y-36 transition-all duration-300 pb-2 md:pb-4">
-                    {/* FACE DOWN - Moved Higher */}
+                  <div className="flex flex-col items-center -space-y-16 md:-space-y-24 transition-all duration-300 pb-2 md:pb-4">
                     <div className="flex gap-2 md:gap-4 opacity-90 mb-8">{(player.faceDown || []).filter(c=>c&&c.id).map((c,i)=><Card key={c.id} dealDelay={dealDelay + i*0.05} faceDown isSmall playable={isActive && player.hand.length===0 && player.faceUp.length===0} onClick={()=>playCard(c,'faceDown')}/>)}</div>
-                    
-                    {/* FACE UP - LARGE VISIBILITY */}
-                    <div className="flex gap-4 md:gap-6 z-10 mb-16 md:mb-24">{(player.faceUp || []).filter(c=>c&&c.id).map((c,i)=><Card key={c.id} dealDelay={dealDelay + 3*0.05 + i*0.05} card={c} playable={isActive} onClick={()=>playCard(c,'faceUp')}/>)}</div>
-                    
-                    {/* HAND - FANNED AT BOTTOM */}
+                    <div className="flex gap-2 md:gap-4 z-10 mb-8 md:mb-12">{(player.faceUp || []).filter(c=>c&&c.id).map((c,i)=><Card key={c.id} dealDelay={dealDelay + 3*0.05 + i*0.05} card={c} playable={isActive} onClick={()=>playCard(c,'faceUp')}/>)}</div>
                     <div className="flex -space-x-3 md:-space-x-4 h-24 md:h-32 items-end z-20 hover:-space-x-1 transition-all">{(player.hand || []).filter(c=>c&&c.id).map((c,i)=><Card key={c.id} dealDelay={dealDelay + 6*0.05 + i*0.05} card={c} index={i} total={player.hand.length} playable={isActive} onClick={()=>playCard(c,'hand')}/>)}</div>
                   </div>
                 ) : (
@@ -561,9 +556,9 @@ function GameApp() {
           <>
             {/* 1. MINIMIZED STATE (Just a button to bring back UI) */}
             {viewingBoard ? (
-              <div className="absolute bottom-32 left-1/2 -translate-x-1/2 z-50">
-                <button onClick={() => setViewingBoard(false)} className="bg-blue-600 text-white px-6 py-3 rounded-full font-bold shadow-lg flex items-center gap-2 hover:bg-blue-500 transition animate-bounce">
-                  <RotateCcw size={20}/> Open Bidding
+              <div className="absolute bottom-8 left-4 z-50 md:bottom-10 md:left-10">
+                <button onClick={() => setViewingBoard(false)} className="bg-blue-600 text-white px-4 py-2 md:px-6 md:py-3 rounded-full font-bold shadow-lg flex items-center gap-2 hover:bg-blue-500 transition animate-bounce text-sm md:text-base">
+                  <RotateCcw size={16} className="md:w-5 md:h-5"/> Open Bidding
                 </button>
               </div>
             ) : (
