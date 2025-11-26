@@ -249,10 +249,13 @@ export default function App() {
     setLoading(true);
     try {
       const newId = Math.random().toString(36).substring(2, 8).toUpperCase();
-      const userName = user.displayName || 'Player 1';
+      // Use Google Display Name if available, otherwise default
+      const userName = user.displayName ? user.displayName : 'Player 1';
+      const userPhoto = user.photoURL || null;
+
       await setDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'games', newId), {
         id: newId, hostId: user.uid, status: 'LOBBY',
-        players: [{ uid: user.uid, name: userName, team: 'A', seatIndex: 0, hand: [], faceUp: [], faceDown: [] }],
+        players: [{ uid: user.uid, name: userName, photo: userPhoto, team: 'A', seatIndex: 0, hand: [], faceUp: [], faceDown: [] }],
         deck: [], currentTurnIndex: 0, dealerIndex: 0,
         bid: { winnerIndex: null, amount: 0, suit: null, currentHighBid: 0, passedPlayers: [] },
         trick: [], scores: { A: 0, B: 0 }
@@ -278,9 +281,12 @@ export default function App() {
       if (data.players.length >= 6) { alert("Game full!"); setLoading(false); return; }
 
       const idx = data.players.length;
-      const userName = user.displayName || `Player ${idx+1}`;
+      // Use Google Display Name if available, otherwise Player X
+      const userName = user.displayName ? user.displayName : `Player ${idx+1}`;
+      const userPhoto = user.photoURL || null;
+
       await updateDoc(ref, {
-        players: arrayUnion({ uid: user.uid, name: userName, team: idx%2===0?'A':'B', seatIndex: idx, hand:[], faceUp:[], faceDown:[] })
+        players: arrayUnion({ uid: user.uid, name: userName, photo: userPhoto, team: idx%2===0?'A':'B', seatIndex: idx, hand:[], faceUp:[], faceDown:[] })
       });
     } catch (err) {
       alert("Error joining: " + err.message);
@@ -439,7 +445,11 @@ export default function App() {
             
             {!gameState ? (
               <div className="space-y-4">
-                <div className="text-sm text-gray-300 mb-2">Logged in as: <span className="text-gold font-bold">{user.displayName || 'Guest'}</span></div>
+                <div className="text-sm text-gray-300 mb-2 flex items-center justify-center gap-2">
+                  Logged in as: 
+                  {user.photoURL && <img src={user.photoURL} className="w-6 h-6 rounded-full" alt="" />}
+                  <span className="text-gold font-bold">{user.displayName || 'Guest'}</span>
+                </div>
                 <button onClick={createGame} className="w-full bg-gold text-black font-bold py-3 rounded-lg hover:brightness-110 shadow-lg transition">Create Table</button>
                 <div className="flex gap-2">
                   <input type="text" placeholder="CODE" className="flex-1 bg-black/40 border border-white/20 rounded px-3 text-center uppercase" value={gameId} onChange={e=>setGameId(e.target.value.toUpperCase())} />
@@ -463,6 +473,7 @@ export default function App() {
                          </div>
                       ) : (
                         <div className="flex items-center gap-2">
+                          {p.photo && <img src={p.photo} className="w-6 h-6 rounded-full border border-gold/50" alt="" />}
                           <span>{p.name} {p.uid === user.uid && '(You)'}</span>
                           {p.uid === user.uid && (
                             <button onClick={() => startEditing(p.name)} className="text-gray-400 hover:text-white transition-colors"><Pencil size={12} /></button>
@@ -532,8 +543,13 @@ export default function App() {
             return (
               <div key={offset} className={`absolute ${positions[offset]} flex flex-col items-center transition-all duration-500`}>
                 <div className={`relative mb-2 md:mb-4 transition-all duration-300 ${isActive ? 'scale-110 md:scale-125 z-40' : 'scale-90 md:scale-100 z-10 opacity-80'}`}>
-                  <div className={`w-10 h-10 md:w-14 md:h-14 rounded-full flex items-center justify-center font-serif text-sm md:text-xl font-bold shadow-2xl border-2 ${player.team === 'A' ? 'bg-gradient-to-br from-red-900 to-red-700 border-red-400' : 'bg-gradient-to-br from-blue-900 to-blue-700 border-blue-400'} ${isActive ? 'glow-gold ring-2 ring-gold' : ''}`}>
-                    {player.name.charAt(0)}
+                  <div className={`w-10 h-10 md:w-14 md:h-14 rounded-full flex items-center justify-center font-serif text-sm md:text-xl font-bold shadow-2xl border-2 overflow-hidden ${player.team === 'A' ? 'bg-gradient-to-br from-red-900 to-red-700 border-red-400' : 'bg-gradient-to-br from-blue-900 to-blue-700 border-blue-400'} ${isActive ? 'glow-gold ring-2 ring-gold' : ''}`}>
+                    {/* Render Google Photo OR Initials */}
+                    {player.photo ? (
+                      <img src={player.photo} alt={player.name} className="w-full h-full object-cover" />
+                    ) : (
+                      player.name.charAt(0)
+                    )}
                   </div>
                   <div className="absolute -bottom-4 md:-bottom-6 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur px-2 py-0.5 rounded text-[10px] md:text-xs whitespace-nowrap border border-white/10">
                     {isMe ? 'YOU' : player.name}
