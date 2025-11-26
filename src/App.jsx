@@ -10,7 +10,7 @@ import {
   signOut 
 } from 'firebase/auth';
 import { getFirestore, doc, setDoc, getDoc, onSnapshot, updateDoc, arrayUnion, increment, runTransaction } from 'firebase/firestore';
-import { Heart, Diamond, Club, Spade, RotateCcw, Pencil, Check, X, LogOut, UserCircle, Play } from 'lucide-react';
+import { Heart, Diamond, Club, Spade, RotateCcw, Pencil, Check, X, LogOut, UserCircle, Play, ArrowRight } from 'lucide-react';
 
 // --- STYLES ---
 const styles = `
@@ -221,9 +221,17 @@ export default function App() {
     try {
       await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
-        if (!gameDoc.exists()) throw "Game not found!";
+        if (!gameDoc.exists()) throw "Game not found! Check code.";
+        
         const data = gameDoc.data();
-        if (data.players.some(p => p.uid === user.uid)) return; // Already joined
+        
+        // Logic Check: Are we already in the list?
+        const existingPlayer = data.players.find(p => p.uid === user.uid);
+        if (existingPlayer) {
+          // We are already in! This isn't an error, just a notification.
+          throw "ALREADY_JOINED"; 
+        }
+
         if (data.players.length >= 6) throw "Game Full!";
         
         const idx = data.players.length;
@@ -237,7 +245,15 @@ export default function App() {
         };
         transaction.update(gameRef, { players: [...data.players, newPlayer] });
       });
-    } catch (err) { alert(err); }
+    } catch (err) { 
+      if (err === "ALREADY_JOINED") {
+        alert("You are already in this game!");
+      } else if (typeof err === 'string') {
+        alert(err);
+      } else {
+        alert("Connection Error: " + err.message); 
+      }
+    }
     setLoading(false);
   };
 
@@ -253,7 +269,7 @@ export default function App() {
     });
   };
 
-  // Game logic functions (makeBid, selectMasterSuit, playCard) remain same...
+  // Game logic functions...
   const updatePlayerName = async () => {
     if (!user || !gameId || !editingName.trim()) return;
     const updatedPlayers = gameState.players.map(p => p.uid === user.uid ? { ...p, name: editingName.trim() } : p);
@@ -304,7 +320,7 @@ export default function App() {
   const amIJoined = useMemo(() => gameState?.players.some(p => p.uid === user?.uid), [gameState, user]);
   const mySeatIndex = useMemo(() => {
     const idx = gameState?.players.findIndex(p => p.uid === user?.uid);
-    return idx !== -1 ? idx : 0; // Default to 0 if spectating
+    return idx !== -1 ? idx : 0; 
   }, [gameState, user]);
   
   const getPlayer = (offset) => {
@@ -313,11 +329,10 @@ export default function App() {
     return gameState.players.find(p => p.seatIndex === targetSeat);
   };
 
-  // --- LOADING / LOGIN ---
   if (loading) return <><style>{styles}</style><div className="game-table min-h-screen text-white flex items-center justify-center font-serif text-2xl flex-col gap-4"><div className="animate-spin text-gold"><RotateCcw size={48}/></div>Processing...</div></>;
   if (!user) return <><style>{styles}</style><div className="game-table min-h-screen text-white flex flex-col items-center justify-center p-4"><div className="glass-panel p-8 rounded-2xl max-w-md w-full text-center"><h1 className="text-4xl md:text-5xl font-serif text-gold mb-8">Royal Court</h1><div className="space-y-4"><button onClick={handleGoogleLogin} className="w-full bg-white text-gray-900 font-bold py-3 rounded-lg flex justify-center gap-2"><img src="https://www.svgrepo.com/show/475656/google-color.svg" className="w-5 h-5"/>Login with Google</button><button onClick={handleGuestLogin} className="w-full bg-gray-700 text-white font-bold py-3 rounded-lg flex justify-center gap-2"><UserCircle size={20}/>Play as Guest</button></div>{error && <div className="mt-4 text-red-300 text-sm">{error}</div>}</div></div></>;
 
-  // --- LOBBY (Before Game Starts) ---
+  // --- LOBBY ---
   if (!gameState || gameState.status === 'LOBBY') {
     return (
       <>
@@ -328,7 +343,7 @@ export default function App() {
             <h1 className="text-3xl md:text-5xl font-serif text-gold mb-6 drop-shadow-lg">Royal Court</h1>
             {error && <div className="bg-red-900/50 text-red-200 p-2 rounded mb-4 text-sm">{error}</div>}
 
-            {/* SCENARIO 1: User has NOT entered a valid code yet */}
+            {/* 1. ENTER CODE */}
             {!gameState && (
               <div className="space-y-4">
                 <div className="text-sm text-gray-300 mb-2 flex justify-center gap-2 items-center">
@@ -337,15 +352,12 @@ export default function App() {
                 </div>
                 <button onClick={createGame} className="w-full bg-gold text-black font-bold py-3 rounded-lg shadow-lg">Create Table</button>
                 <div className="flex gap-2">
-                  <input type="text" placeholder="ENTER CODE" className="flex-1 bg-black/40 border border-white/20 rounded px-3 text-center uppercase" value={gameId} onChange={e=>setGameId(e.target.value.toUpperCase())} />
-                  {/* Note: We removed the Join button here because simply typing the code triggers the snapshot below.
-                      The actual JOIN action happens in Scenario 2. */}
+                  <input type="text" placeholder="ENTER CODE" className="flex-1 bg-black/40 border border-white/20 rounded px-3 text-center uppercase" value={gameId} onChange={e=>setGameId(e.target.value.toUpperCase().trim())} />
                 </div>
-                <p className="text-xs text-gray-400">Enter a friend's code to search for their table.</p>
               </div>
             )}
 
-            {/* SCENARIO 2: Code found, user is watching lobby but NOT SEATED yet */}
+            {/* 2. JOIN BUTTON (This was failing before due to UI state) */}
             {gameState && !amIJoined && (
               <div className="space-y-4 animate-in fade-in">
                 <div className="bg-black/40 p-4 rounded-xl border border-green-500/50">
@@ -360,7 +372,7 @@ export default function App() {
               </div>
             )}
 
-            {/* SCENARIO 3: User IS SEATED in the lobby */}
+            {/* 3. LOBBY LIST */}
             {gameState && amIJoined && (
               <div className="space-y-6 animate-in zoom-in">
                 <div className="bg-black/40 p-4 rounded-xl border border-white/10">
@@ -388,9 +400,7 @@ export default function App() {
                   ))}
                 </div>
                 {gameState.hostId === user.uid ? (
-                  <button disabled={gameState.players.length<6} onClick={startGame} className="w-full bg-green-600 disabled:bg-gray-600 py-3 rounded font-bold shadow-lg text-sm md:text-base flex justify-center gap-2">
-                    <Play size={20}/> START GAME ({gameState.players.length}/6)
-                  </button>
+                  <button disabled={gameState.players.length<6} onClick={startGame} className="w-full bg-green-600 disabled:bg-gray-600 py-3 rounded font-bold shadow-lg text-sm md:text-base flex justify-center gap-2"><Play size={20}/> START GAME ({gameState.players.length}/6)</button>
                 ) : (
                   <div className="text-yellow-400 animate-pulse text-sm">Waiting for Host to Start...</div>
                 )}
@@ -416,7 +426,6 @@ export default function App() {
     <>
       <style>{styles}</style>
       <div className="game-table text-white font-sans select-none">
-        {/* Top Bar */}
         <div className="absolute top-0 left-0 right-0 p-2 md:p-4 flex justify-between items-start z-50 pointer-events-none">
           <div className="glass-panel p-2 md:p-3 rounded-xl pointer-events-auto">
             <div className="text-[10px] md:text-xs text-gray-400 uppercase tracking-wider mb-1">Score</div>
@@ -433,8 +442,6 @@ export default function App() {
             </div>
           )}
         </div>
-
-        {/* Table Area */}
         <div className="absolute inset-0 flex items-center justify-center perspective-[1000px]">
           {[0, 1, 2, 3, 4, 5].map(offset => {
             const player = getPlayer(offset);
@@ -474,8 +481,6 @@ export default function App() {
             })}
           </div>
         </div>
-
-        {/* Overlays */}
         {gameState.status === 'BIDDING' && isActive && !gameState.bid.suit && (
           <div className="absolute inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in p-4">
             <div className="glass-panel p-4 md:p-8 rounded-2xl text-center border-gold border-2 max-w-sm w-full">
