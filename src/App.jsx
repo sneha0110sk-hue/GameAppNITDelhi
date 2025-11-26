@@ -137,6 +137,7 @@ const Card = ({ card, faceDown = false, onClick, playable = false, isSmall = fal
   const rotation = total > 1 ? (index - (total - 1) / 2) * 5 : 0;
   const translateY = total > 1 ? Math.abs(index - (total - 1) / 2) * 2 : 0;
 
+  // Balanced Card Sizes
   const smallClasses = 'w-8 h-11 md:w-12 md:h-16 text-[8px] md:text-xs';
   const normalClasses = 'w-14 h-20 md:w-20 md:h-28 text-xs md:text-base';
 
@@ -434,7 +435,12 @@ function GameApp() {
       let updates = { 'bid.passedPlayers': passed, currentTurnIndex: (gameState.currentTurnIndex + 1) % 6 };
       if (passed.length >= 5 && (gameState.bid?.currentHighBid || 0) > 0) {
         updates['bid.winnerIndex'] = gameState.bid.currentHighBidder; updates['bid.amount'] = gameState.bid.currentHighBid;
-      } else if (passed.length === 6) { updates['bid.winnerIndex'] = gameState.dealerIndex; updates['bid.amount'] = 5; }
+        updates['currentTurnIndex'] = gameState.bid.currentHighBidder;
+      } else if (passed.length === 6) { 
+        updates['bid.winnerIndex'] = gameState.dealerIndex; 
+        updates['bid.amount'] = 5; 
+        updates['currentTurnIndex'] = gameState.dealerIndex;
+      }
       await updateDoc(ref, updates);
     } else { await updateDoc(ref, { 'bid.currentHighBid': a, 'bid.currentHighBidder': myIndex, currentTurnIndex: (gameState.currentTurnIndex + 1) % 6 }); }
   };
@@ -633,7 +639,25 @@ function GameApp() {
                 <div className="glass-panel p-4 md:p-8 rounded-2xl text-center border-gold border-2 max-w-sm w-full relative">
                   <button onClick={() => setShowBidModal(false)} className="absolute top-2 right-2 text-gray-400 hover:text-white p-2 rounded-full hover:bg-white/10" title="Hide"><X size={24} /></button>
                   {winnerIndex === mySeatIndex ? (
-                     <div><h2 className="text-xl md:text-3xl font-serif text-gold mb-4 md:mb-6">Choose Master Suit</h2><div className="flex gap-2 md:gap-4 justify-center">{SUITS.map(s=><button key={s} onClick={()=>selectMasterSuit(s)} className="bg-white p-2 md:p-4 rounded-xl hover:scale-110 transition shadow-lg">{getSuitIcon(s,32)}</button>)}</div></div>
+                     <div>
+                       <h2 className="text-xl md:text-3xl font-serif text-gold mb-4 md:mb-6">Choose Master Suit</h2>
+                       <div className="flex gap-4 justify-center">
+                         {SUITS.map(s => (
+                           <button 
+                             key={s} 
+                             onClick={() => selectMasterSuit(s)} 
+                             className="bg-white w-16 h-24 md:w-24 md:h-36 rounded-xl shadow-2xl border-4 border-gray-200 flex flex-col items-center justify-center hover:scale-110 hover:-translate-y-4 transition-all duration-300 hover:border-gold group"
+                           >
+                             <div className="transform group-hover:scale-125 transition-transform duration-300">
+                               {getSuitIcon(s, 40)}
+                             </div>
+                             <span className="text-xs md:text-sm font-bold uppercase mt-2 text-gray-500 group-hover:text-black">
+                               {s === 'S' ? 'Spade' : s === 'H' ? 'Heart' : s === 'C' ? 'Club' : 'Diamond'}
+                             </span>
+                           </button>
+                         ))}
+                       </div>
+                     </div>
                   ) : (
                     <div><h2 className="text-xl md:text-2xl font-serif mb-2">Place Bid</h2><div className="text-gold mb-4 md:mb-6">Current High: {currentBid}</div><div className="grid grid-cols-4 gap-2 mb-4">{[5,6,7,8].map(n=><button key={n} disabled={n<=currentBid} onClick={()=>makeBid(n)} className="bg-gold text-black font-bold py-2 md:py-3 rounded hover:bg-yellow-300 disabled:opacity-20 transition">{n}</button>)}</div><button onClick={()=>makeBid(0)} className="w-full bg-white/10 hover:bg-red-900/50 py-2 md:py-3 rounded text-red-300 border border-red-900/30">PASS</button></div>
                   )}
