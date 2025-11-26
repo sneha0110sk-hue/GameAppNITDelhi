@@ -844,4 +844,4 @@ function GameApp() {
   );
 }
 
-export default function AppWithBoundary() { return <ErrorBoundary><GameApp /></ErrorBoundary>; 
+export default function AppWithBoundary() { return <ErrorBoundary><GameApp /></ErrorBoundary>; }
