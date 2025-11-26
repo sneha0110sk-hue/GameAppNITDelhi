@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
 import { 
   getAuth, 
@@ -79,6 +79,40 @@ const styles = `
 .glow-gold {
   animation: pulse-gold 2s infinite;
 }
+/* Trump Animation */
+@keyframes announceTrump {
+  0% {
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(0);
+    opacity: 0;
+  }
+  20% {
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(4);
+    opacity: 1;
+  }
+  60% {
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(4);
+    opacity: 1;
+  }
+  100% {
+    top: 4%; /* Matches top bar padding */
+    left: 4%; /* Matches top bar padding */
+    transform: translate(0, 0) scale(1);
+    opacity: 0; /* Fade out as the real icon is already there */
+  }
+}
+.animate-trump {
+  position: fixed;
+  z-index: 100;
+  animation: announceTrump 2s cubic-bezier(0.68, -0.55, 0.265, 1.55) forwards;
+  pointer-events: none;
+}
+
 @media (max-height: 500px) and (orientation: landscape) {
   .player-avatar { transform: scale(0.7); }
   .hand-container { bottom: -10px; }
@@ -198,6 +232,11 @@ function GameApp() {
   const [editingName, setEditingName] = useState('');
   
   const [showBidModal, setShowBidModal] = useState(false);
+  
+  // Animation States
+  const [showTrumpAnim, setShowTrumpAnim] = useState(false);
+  const [animatingSuit, setAnimatingSuit] = useState(null);
+  const prevBidSuitRef = useRef(null);
 
   useEffect(() => { if (auth) return onAuthStateChanged(auth, setUser); }, []);
 
@@ -227,6 +266,22 @@ function GameApp() {
     }, (err) => console.error(err));
     return () => unsubscribe();
   }, [user, gameId]);
+
+  // --- TRUMP ANIMATION TRIGGER ---
+  useEffect(() => {
+    const currentSuit = gameState?.bid?.suit;
+    if (currentSuit && currentSuit !== prevBidSuitRef.current) {
+      // New trump selected!
+      setAnimatingSuit(currentSuit);
+      setShowTrumpAnim(true);
+      // Hide animation after 2.5s (animation duration + buffer)
+      setTimeout(() => {
+        setShowTrumpAnim(false);
+        setAnimatingSuit(null);
+      }, 2500);
+    }
+    prevBidSuitRef.current = currentSuit;
+  }, [gameState?.bid?.suit]);
 
   // --- BOT LOGIC ---
   useEffect(() => {
@@ -572,18 +627,32 @@ function GameApp() {
       <style>{styles}</style>
       <div className="game-table text-white font-sans select-none">
         <div className="absolute top-4 right-4 z-50"><button onClick={() => window.location.reload()} className="bg-black/50 hover:bg-white/10 p-2 rounded-full text-white"><RefreshCw size={20} /></button></div>
-        <div className="absolute top-0 left-0 right-0 p-2 md:p-4 flex justify-between items-start z-50 pointer-events-none">
-          <div className="glass-panel p-2 md:p-3 rounded-xl pointer-events-auto">
-            <div className="text-[10px] md:text-xs text-gray-400 uppercase tracking-wider mb-1">Score</div>
-            <div className="flex gap-3 md:gap-6 font-serif text-sm md:text-xl"><span className="text-red-300">A: <b className="text-white">{(gameState.scores || {}).A || 0}</b></span><span className="text-blue-300">B: <b className="text-white">{(gameState.scores || {}).B || 0}</b></span></div>
+        
+        {/* ANIMATED TRUMP OVERLAY */}
+        {showTrumpAnim && animatingSuit && (
+          <div className="animate-trump">
+            <div className="bg-white rounded-full p-4 shadow-[0_0_50px_rgba(255,215,0,0.8)] border-4 border-gold">
+              {getSuitIcon(animatingSuit, 120)}
+            </div>
           </div>
-          {bidSuit && (
+        )}
+
+        <div className="absolute top-0 left-0 right-0 p-2 md:p-4 flex justify-between items-start z-50 pointer-events-none">
+          {/* TOP BAR: Master Left, Score Right */}
+          {bidSuit ? (
             <div className="glass-panel px-4 py-1 md:px-6 md:py-2 rounded-b-xl md:rounded-b-2xl -mt-2 md:-mt-4 flex flex-col items-center pointer-events-auto border-t-0 shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
               <div className="text-gold text-[10px] md:text-xs uppercase mb-1">Master</div>
               <div className="bg-white rounded-full w-8 h-8 md:w-10 md:h-10 flex items-center justify-center shadow-inner">{getSuitIcon(bidSuit, 20)}</div>
               <div className="text-[10px] md:text-xs mt-1 font-bold">Bid: {gameState.bid?.amount}</div>
             </div>
+          ) : (
+            <div className="w-16"></div> /* Spacer if no trump yet */
           )}
+
+          <div className="glass-panel p-2 md:p-3 rounded-xl pointer-events-auto">
+            <div className="text-[10px] md:text-xs text-gray-400 uppercase tracking-wider mb-1">Score</div>
+            <div className="flex gap-3 md:gap-6 font-serif text-sm md:text-xl"><span className="text-red-300">A: <b className="text-white">{(gameState.scores || {}).A || 0}</b></span><span className="text-blue-300">B: <b className="text-white">{(gameState.scores || {}).B || 0}</b></span></div>
+          </div>
         </div>
         <div className="absolute inset-0 flex items-center justify-center perspective-[1000px]">
           {[0, 1, 2, 3, 4, 5].map(offset => {
