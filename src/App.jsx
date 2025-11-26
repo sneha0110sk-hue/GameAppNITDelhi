@@ -10,8 +10,7 @@ import {
   signOut 
 } from 'firebase/auth';
 import { getFirestore, doc, setDoc, getDoc, onSnapshot, updateDoc, arrayUnion, increment, runTransaction } from 'firebase/firestore';
-// Removed 'Bot' to prevent version crashes, using UserCircle instead
-import { Heart, Diamond, Club, Spade, RotateCcw, Pencil, Check, X, LogOut, UserCircle, Play } from 'lucide-react';
+import { Heart, Diamond, Club, Spade, RotateCcw, Pencil, Check, X, LogOut, UserCircle, Play, Bot } from 'lucide-react';
 
 // --- STYLES ---
 const styles = `
@@ -34,6 +33,7 @@ const styles = `
   transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
   box-shadow: -1px 1px 3px rgba(0,0,0,0.3);
   transform-style: preserve-3d;
+  backface-visibility: hidden;
 }
 .card-hover:hover {
   transform: translateY(-15px) scale(1.05) !important;
@@ -65,13 +65,23 @@ const styles = `
   transform: translateY(-2px);
   box-shadow: 0 5px 15px rgba(0,0,0,0.3);
 }
+
+/* --- DEALING ANIMATION --- */
 @keyframes dealCard {
-  from { opacity: 0; transform: translateY(-100px) scale(0.5); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+  from { 
+    opacity: 0; 
+    transform: translate(0, -200%) scale(0.1); /* Start small and possibly from center-ish relative to player */
+  }
+  to { 
+    opacity: 1; 
+    transform: translate(0, 0) scale(1); 
+  }
 }
 .animate-deal {
-  animation: dealCard 0.4s ease-out forwards;
+  animation: dealCard 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  opacity: 0; /* Hidden until animation starts */
 }
+
 @keyframes pulse-gold {
   0% { box-shadow: 0 0 0 0 rgba(255, 215, 0, 0.4); }
   70% { box-shadow: 0 0 0 10px rgba(255, 215, 0, 0); }
@@ -134,7 +144,7 @@ const getSuitIcon = (suit, size = 16) => {
   }
 };
 
-const Card = ({ card, faceDown = false, onClick, playable = false, isSmall = false, index = 0, total = 1 }) => {
+const Card = ({ card, faceDown = false, onClick, playable = false, isSmall = false, index = 0, total = 1, dealDelay = 0 }) => {
   const rotation = total > 1 ? (index - (total - 1) / 2) * 5 : 0;
   const translateY = total > 1 ? Math.abs(index - (total - 1) / 2) * 2 : 0;
 
@@ -142,10 +152,14 @@ const Card = ({ card, faceDown = false, onClick, playable = false, isSmall = fal
   const smallClasses = 'w-10 h-14 md:w-14 md:h-20 text-[10px] md:text-sm';
   const normalClasses = 'w-16 h-24 md:w-24 md:h-36 text-sm md:text-lg';
 
+  const animationStyle = { animationDelay: `${dealDelay}s` };
+
   if (faceDown) {
     return (
-      <div onClick={playable ? onClick : undefined} style={{ transform: `rotate(${rotation}deg) translateY(${translateY}px)` }}
-        className={`card-base card-pattern rounded-md border border-white/50 ${isSmall ? smallClasses : normalClasses} ${playable ? 'cursor-pointer card-hover ring-2 ring-yellow-400' : ''} flex items-center justify-center relative`}
+      <div 
+        onClick={playable ? onClick : undefined} 
+        style={{ ...animationStyle, transform: `rotate(${rotation}deg) translateY(${translateY}px)` }}
+        className={`card-base card-pattern rounded-md border border-white/50 ${isSmall ? smallClasses : normalClasses} ${playable ? 'cursor-pointer card-hover ring-2 ring-yellow-400' : ''} flex items-center justify-center relative animate-deal`}
       >
         <div className="w-6 h-6 rounded-full bg-white/20 backdrop-blur-sm"></div>
       </div>
@@ -154,8 +168,10 @@ const Card = ({ card, faceDown = false, onClick, playable = false, isSmall = fal
   if (!card) return <div className={`${isSmall ? smallClasses : normalClasses} border-2 border-dashed border-white/20 rounded-md`}></div>;
   const isRed = card.suit === 'H' || card.suit === 'D';
   return (
-    <div onClick={playable ? onClick : undefined} style={{ transform: `rotate(${rotation}deg) translateY(${translateY}px)` }}
-      className={`card-base bg-white rounded-md flex flex-col items-center justify-between p-1 md:p-2 select-none relative ${isSmall ? smallClasses : normalClasses} ${playable ? 'cursor-pointer card-hover ring-2 md:ring-4 ring-yellow-400 z-10' : ''}`}
+    <div 
+      onClick={playable ? onClick : undefined} 
+      style={{ ...animationStyle, transform: `rotate(${rotation}deg) translateY(${translateY}px)` }}
+      className={`card-base bg-white rounded-md flex flex-col items-center justify-between p-1 md:p-2 select-none relative animate-deal ${isSmall ? smallClasses : normalClasses} ${playable ? 'cursor-pointer card-hover ring-2 md:ring-4 ring-yellow-400 z-10' : ''}`}
     >
       <div className="self-start font-bold leading-none flex flex-col items-center"><span className={isRed ? 'text-red-600' : 'text-black'}>{card.rank}</span><div className="scale-75 origin-top">{getSuitIcon(card.suit, 10)}</div></div>
       <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">{getSuitIcon(card.suit, isSmall ? 16 : 32)}</div>
@@ -507,6 +523,10 @@ function GameApp() {
             if (!player) return null;
             const isMe = offset === 0;
             const isActive = gameState.currentTurnIndex === player.seatIndex;
+            
+            // Calculate delay based on player sequence
+            const dealDelay = (player.seatIndex * 8) * 0.05;
+
             return (
               <div key={offset} className={`absolute ${positions[offset]} flex flex-col items-center transition-all duration-500`}>
                 <div className={`relative mb-2 md:mb-4 transition-all duration-300 ${isActive ? 'scale-110 md:scale-125 z-40' : 'scale-100 z-10 opacity-80'}`}>
@@ -517,15 +537,15 @@ function GameApp() {
                 </div>
                 {isMe ? (
                   <div className="flex flex-col items-center -space-y-16 md:-space-y-24 transition-all duration-300 pb-2 md:pb-4">
-                    <div className="flex gap-2 md:gap-4 opacity-90">{(player.faceDown || []).filter(c=>c&&c.id).map(c=><Card key={c.id} faceDown isSmall playable={isActive && player.hand.length===0 && player.faceUp.length===0} onClick={()=>playCard(c,'faceDown')}/>)}</div>
-                    <div className="flex gap-2 md:gap-4 z-10 mb-8 md:mb-12">{(player.faceUp || []).filter(c=>c&&c.id).map(c=><Card key={c.id} card={c} playable={isActive} onClick={()=>playCard(c,'faceUp')}/>)}</div>
-                    <div className="flex -space-x-3 md:-space-x-4 h-24 md:h-32 items-end z-20 hover:-space-x-1 transition-all">{(player.hand || []).filter(c=>c&&c.id).map((c,i)=><Card key={c.id} card={c} index={i} total={player.hand.length} playable={isActive} onClick={()=>playCard(c,'hand')}/>)}</div>
+                    <div className="flex gap-2 md:gap-4 opacity-90">{(player.faceDown || []).filter(c=>c&&c.id).map((c,i)=><Card key={c.id} dealDelay={dealDelay + i*0.05} faceDown isSmall playable={isActive && player.hand.length===0 && player.faceUp.length===0} onClick={()=>playCard(c,'faceDown')}/>)}</div>
+                    <div className="flex gap-2 md:gap-4 z-10 mb-8 md:mb-12">{(player.faceUp || []).filter(c=>c&&c.id).map((c,i)=><Card key={c.id} dealDelay={dealDelay + 3*0.05 + i*0.05} card={c} playable={isActive} onClick={()=>playCard(c,'faceUp')}/>)}</div>
+                    <div className="flex -space-x-3 md:-space-x-4 h-24 md:h-32 items-end z-20 hover:-space-x-1 transition-all">{(player.hand || []).filter(c=>c&&c.id).map((c,i)=><Card key={c.id} dealDelay={dealDelay + 6*0.05 + i*0.05} card={c} index={i} total={player.hand.length} playable={isActive} onClick={()=>playCard(c,'hand')}/>)}</div>
                   </div>
                 ) : (
                   <div className="flex flex-col items-center -space-y-3 md:-space-y-4 scale-100 opacity-60">
-                     <div className="flex gap-0.5 md:gap-1">{(player.faceDown || []).map((_,i)=><Card key={i} faceDown isSmall/>)}</div>
-                     <div className="flex gap-0.5 md:gap-1 z-10">{(player.faceUp || []).map((c,i)=><Card key={i} card={c} isSmall/>)}</div>
-                     <div className="flex gap-0.5 md:gap-1 z-20">{(player.hand || []).map((_,i)=><Card key={i} faceDown isSmall/>)}</div>
+                     <div className="flex gap-0.5 md:gap-1">{(player.faceDown || []).map((_,i)=><Card key={i} dealDelay={dealDelay + i*0.05} faceDown isSmall/>)}</div>
+                     <div className="flex gap-0.5 md:gap-1 z-10">{(player.faceUp || []).map((c,i)=><Card key={i} dealDelay={dealDelay + 3*0.05 + i*0.05} card={c} isSmall/>)}</div>
+                     <div className="flex gap-0.5 md:gap-1 z-20">{(player.hand || []).map((_,i)=><Card key={i} dealDelay={dealDelay + 6*0.05 + i*0.05} faceDown isSmall/>)}</div>
                   </div>
                 )}
               </div>
