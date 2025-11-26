@@ -1,8 +1,16 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
+import { 
+  getAuth, 
+  signInAnonymously, 
+  onAuthStateChanged, 
+  signInWithCustomToken, 
+  GoogleAuthProvider, 
+  signInWithPopup, 
+  signOut 
+} from 'firebase/auth';
 import { getFirestore, doc, setDoc, getDoc, onSnapshot, updateDoc, arrayUnion, increment } from 'firebase/firestore';
-import { Heart, Diamond, Club, Spade, Copy, Users, Trophy, Menu, RotateCcw, Pencil, Check, X, RefreshCw } from 'lucide-react';
+import { Heart, Diamond, Club, Spade, RotateCcw, Pencil, Check, X, LogOut, UserCircle } from 'lucide-react';
 
 // --- STYLES ---
 const styles = `
@@ -97,8 +105,6 @@ try {
   console.error("Firebase init error:", err);
 }
 
-// *** CRITICAL FIX: HARDCODED APP ID ***
-// This ensures everyone is in the same database "room"
 const APP_ID = 'court-piece-production-v1';
 
 // --- CONSTANTS ---
@@ -184,34 +190,43 @@ export default function App() {
   const [isEditingName, setIsEditingName] = useState(false);
   const [editingName, setEditingName] = useState('');
 
-  // Auth Init
+  // --- AUTH LOGIC ---
   useEffect(() => {
     if (!auth) return;
-    const initAuth = async () => {
-      try {
-        // Attempt to use custom token if provided (Canvas environment)
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          try {
-            await signInWithCustomToken(auth, __initial_auth_token);
-            return; // Success, exit
-          } catch (e) {
-            console.warn("Custom token auth failed (likely config mismatch), falling back to anonymous.", e);
-            // Fallthrough to anonymous
-          }
-        }
-        
-        // Default / Fallback
-        await signInAnonymously(auth);
-      } catch (err) {
-        console.error("Auth error", err);
-        setError("Auth Failed: " + err.message);
-      }
-    };
-    initAuth();
     return onAuthStateChanged(auth, setUser);
   }, []);
 
-  // Sync Game State
+  const handleGoogleLogin = async () => {
+    setLoading(true);
+    const provider = new GoogleAuthProvider();
+    try {
+      await signInWithPopup(auth, provider);
+      setError('');
+    } catch (err) {
+      console.error(err);
+      setError("Google Login Failed: " + err.message);
+    }
+    setLoading(false);
+  };
+
+  const handleGuestLogin = async () => {
+    setLoading(true);
+    try {
+      await signInAnonymously(auth);
+      setError('');
+    } catch (err) {
+      setError("Guest Login Failed: " + err.message);
+    }
+    setLoading(false);
+  };
+
+  const handleSignOut = async () => {
+    await signOut(auth);
+    setGameState(null);
+    setGameId('');
+  };
+
+  // --- GAME SYNC ---
   useEffect(() => {
     if (!user || !gameId || !db) return;
     const unsubscribe = onSnapshot(doc(db, 'artifacts', APP_ID, 'public', 'data', 'games', gameId), (snap) => {
@@ -219,25 +234,25 @@ export default function App() {
         setGameState(snap.data());
         setError('');
       } else {
-        // Only show error if we've actually tried to join a specific non-existent ID
         if (gameId.length > 5) setError("Game not found. Check the code.");
       }
     }, (err) => {
       console.error("Snapshot error:", err);
-      setError("Connection lost. Trying to reconnect...");
+      setError("Connection lost. Reconnecting...");
     });
     return () => unsubscribe();
   }, [user, gameId]);
 
-  // Actions
+  // --- ACTIONS ---
   const createGame = async () => {
     if (!user || !db) return;
     setLoading(true);
     try {
       const newId = Math.random().toString(36).substring(2, 8).toUpperCase();
+      const userName = user.displayName || 'Player 1';
       await setDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'games', newId), {
         id: newId, hostId: user.uid, status: 'LOBBY',
-        players: [{ uid: user.uid, name: 'Player 1', team: 'A', seatIndex: 0, hand: [], faceUp: [], faceDown: [] }],
+        players: [{ uid: user.uid, name: userName, team: 'A', seatIndex: 0, hand: [], faceUp: [], faceDown: [] }],
         deck: [], currentTurnIndex: 0, dealerIndex: 0,
         bid: { winnerIndex: null, amount: 0, suit: null, currentHighBid: 0, passedPlayers: [] },
         trick: [], scores: { A: 0, B: 0 }
@@ -255,34 +270,20 @@ export default function App() {
     try {
       const ref = doc(db, 'artifacts', APP_ID, 'public', 'data', 'games', gameId);
       const snap = await getDoc(ref);
-      
-      if (!snap.exists()) {
-        alert("Game not found! Please check the code.");
-        setLoading(false);
-        return;
-      }
+      if (!snap.exists()) { alert("Game not found!"); setLoading(false); return; }
       
       const data = snap.data();
-      
-      // Check if already in game
       const alreadyJoined = data.players.find(p => p.uid === user.uid);
-      if (alreadyJoined) {
-        setLoading(false);
-        return; // Already joined, the snapshot listener handles the UI
-      }
-
-      if (data.players.length >= 6) {
-        alert("Game is full!");
-        setLoading(false);
-        return;
-      }
+      if (alreadyJoined) { setLoading(false); return; }
+      if (data.players.length >= 6) { alert("Game full!"); setLoading(false); return; }
 
       const idx = data.players.length;
+      const userName = user.displayName || `Player ${idx+1}`;
       await updateDoc(ref, {
-        players: arrayUnion({ uid: user.uid, name: `Player ${idx+1}`, team: idx%2===0?'A':'B', seatIndex: idx, hand:[], faceUp:[], faceDown:[] })
+        players: arrayUnion({ uid: user.uid, name: userName, team: idx%2===0?'A':'B', seatIndex: idx, hand:[], faceUp:[], faceDown:[] })
       });
     } catch (err) {
-      alert("Error joining game: " + err.message);
+      alert("Error joining: " + err.message);
     }
     setLoading(false);
   };
@@ -292,16 +293,11 @@ export default function App() {
     const updatedPlayers = gameState.players.map(p => 
       p.uid === user.uid ? { ...p, name: editingName.trim() } : p
     );
-    await updateDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'games', gameId), {
-      players: updatedPlayers
-    });
+    await updateDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'games', gameId), { players: updatedPlayers });
     setIsEditingName(false);
   };
 
-  const startEditing = (currentName) => {
-    setEditingName(currentName);
-    setIsEditingName(true);
-  };
+  const startEditing = (currentName) => { setEditingName(currentName); setIsEditingName(true); };
 
   const startGame = async () => {
     const deck = generateDeck();
@@ -329,9 +325,7 @@ export default function App() {
       }
       await updateDoc(ref, updates);
     } else {
-      await updateDoc(ref, { 
-        'bid.currentHighBid': amount, 'bid.currentHighBidder': myIndex, currentTurnIndex: (gameState.currentTurnIndex + 1) % 6 
-      });
+      await updateDoc(ref, { 'bid.currentHighBid': amount, 'bid.currentHighBidder': myIndex, currentTurnIndex: (gameState.currentTurnIndex + 1) % 6 });
     }
   };
 
@@ -345,16 +339,11 @@ export default function App() {
     const ref = doc(db, 'artifacts', APP_ID, 'public', 'data', 'games', gameId);
     const myIdx = mySeatIndex;
     const player = gameState.players[myIdx];
-    
     const leadSuit = gameState.trick.length > 0 ? gameState.trick[0].card.suit : null;
     const hasVisibleLead = leadSuit ? [...player.hand, ...player.faceUp].some(c => c.suit === leadSuit) : false;
     
-    if (source === 'faceDown' && (player.hand.length > 0 || player.faceUp.length > 0) && !(!hasVisibleLead && leadSuit)) {
-       alert("Cannot play blind card yet!"); return;
-    }
-    if (source !== 'faceDown' && leadSuit && hasVisibleLead && card.suit !== leadSuit) {
-      alert(`Must follow suit (${leadSuit})`); return;
-    }
+    if (source === 'faceDown' && (player.hand.length > 0 || player.faceUp.length > 0) && !(!hasVisibleLead && leadSuit)) { alert("Cannot play blind card yet!"); return; }
+    if (source !== 'faceDown' && leadSuit && hasVisibleLead && card.suit !== leadSuit) { alert(`Must follow suit (${leadSuit})`); return; }
 
     const updatedPlayer = { ...player };
     updatedPlayer[source] = updatedPlayer[source].filter(c => c.id !== card.id);
@@ -390,31 +379,67 @@ export default function App() {
       <div className="game-table min-h-screen text-white flex items-center justify-center font-serif text-2xl">
         <div className="flex flex-col items-center gap-4">
           <div className="animate-spin text-gold"><RotateCcw size={48} /></div>
-          <div>Loading Casino...</div>
+          <div>Loading...</div>
         </div>
       </div>
     </>
   );
 
-  if (!user) return (
-    <>
-      <style>{styles}</style>
-      <div className="game-table min-h-screen text-white flex items-center justify-center">Connecting to Server...</div>
-    </>
-  );
+  // --- LOGIN SCREEN (New!) ---
+  if (!user) {
+    return (
+      <>
+        <style>{styles}</style>
+        <div className="game-table min-h-screen text-white flex flex-col items-center justify-center p-4">
+          <div className="glass-panel p-8 rounded-2xl max-w-md w-full text-center">
+            <h1 className="text-4xl md:text-5xl font-serif text-gold mb-8 drop-shadow-lg">Royal Court</h1>
+            <div className="space-y-4">
+              <button 
+                onClick={handleGoogleLogin}
+                className="w-full bg-white text-gray-900 font-bold py-3 rounded-lg hover:bg-gray-100 shadow-lg transition flex items-center justify-center gap-2"
+              >
+                <img src="https://www.svgrepo.com/show/475656/google-color.svg" className="w-5 h-5" alt="G" />
+                Sign in with Google
+              </button>
+              <div className="text-sm text-gray-400">- OR -</div>
+              <button 
+                onClick={handleGuestLogin}
+                className="w-full bg-gray-700 text-white font-bold py-3 rounded-lg hover:bg-gray-600 shadow-lg transition flex items-center justify-center gap-2"
+              >
+                <UserCircle size={20} />
+                Play as Guest
+              </button>
+            </div>
+            {error && <div className="mt-4 text-red-300 text-sm bg-red-900/40 p-2 rounded">{error}</div>}
+          </div>
+        </div>
+      </>
+    );
+  }
 
-  // LOBBY
+  // --- LOBBY & GAME ---
   if (!gameState || gameState.status === 'LOBBY') {
     return (
       <>
         <style>{styles}</style>
         <div className="game-table min-h-screen text-white flex flex-col items-center justify-center p-4">
-          <div className="glass-panel p-6 md:p-8 rounded-2xl max-w-md w-full text-center">
+          <div className="glass-panel p-6 md:p-8 rounded-2xl max-w-md w-full text-center relative">
+            
+            {/* Sign Out Button */}
+            <button 
+              onClick={handleSignOut} 
+              className="absolute top-4 right-4 text-gray-400 hover:text-white p-2 rounded-full hover:bg-white/10"
+              title="Sign Out"
+            >
+              <LogOut size={20} />
+            </button>
+
             <h1 className="text-3xl md:text-5xl font-serif text-gold mb-6 md:mb-8 drop-shadow-lg">Royal Court</h1>
             {error && <div className="bg-red-900/50 text-red-200 p-2 rounded mb-4 text-sm">{error}</div>}
             
             {!gameState ? (
               <div className="space-y-4">
+                <div className="text-sm text-gray-300 mb-2">Logged in as: <span className="text-gold font-bold">{user.displayName || 'Guest'}</span></div>
                 <button onClick={createGame} className="w-full bg-gold text-black font-bold py-3 rounded-lg hover:brightness-110 shadow-lg transition">Create Table</button>
                 <div className="flex gap-2">
                   <input type="text" placeholder="CODE" className="flex-1 bg-black/40 border border-white/20 rounded px-3 text-center uppercase" value={gameId} onChange={e=>setGameId(e.target.value.toUpperCase())} />
@@ -451,7 +476,6 @@ export default function App() {
                 {gameState.hostId === user.uid && (
                   <button disabled={gameState.players.length<6} onClick={startGame} className="w-full bg-green-600 disabled:bg-gray-600 py-3 rounded font-bold shadow-lg text-sm md:text-base">START GAME ({gameState.players.length}/6)</button>
                 )}
-                {/* Manual Refresh Button for Guests */}
                 <button onClick={() => window.location.reload()} className="text-xs text-gray-400 underline hover:text-white">Refresh if stuck</button>
               </div>
             )}
@@ -461,7 +485,7 @@ export default function App() {
     );
   }
 
-  // GAME
+  // GAME UI
   const positions = [
     "bottom-4 md:bottom-8 left-1/2 -translate-x-1/2 z-30", // Me
     "bottom-28 right-0 md:bottom-32 md:right-8 scale-75 md:scale-100 origin-bottom-right", // P1
@@ -516,7 +540,6 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Cards */}
                 {isMe ? (
                   <div className="flex flex-col items-center -space-y-12 md:-space-y-16 transition-all duration-300 pb-2 md:pb-4">
                     <div className="flex gap-1 md:gap-2 opacity-90">
