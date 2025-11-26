@@ -496,6 +496,13 @@ function GameApp() {
   const bidSuit = gameState.bid?.suit;
   const winnerIndex = gameState.bid?.winnerIndex;
   const isMyTurn = gameState?.currentTurnIndex === mySeatIndex;
+  
+  // TEAM BIDDING LOGIC: Is my partner winning?
+  const myTeam = gameState.players[mySeatIndex].team;
+  const highBidderTeam = gameState.bid?.currentHighBidder !== undefined && gameState.bid?.currentHighBidder !== null
+    ? gameState.players[gameState.bid.currentHighBidder].team 
+    : null;
+  const isTeammateWinning = highBidderTeam === myTeam;
 
   return (
     <>
@@ -566,7 +573,23 @@ function GameApp() {
               {winnerIndex === mySeatIndex ? (
                  <div><h2 className="text-xl md:text-3xl font-serif text-gold mb-4 md:mb-6">Choose Master Suit</h2><div className="flex gap-2 md:gap-4 justify-center">{SUITS.map(s=><button key={s} onClick={()=>selectMasterSuit(s)} className="bg-white p-2 md:p-4 rounded-xl hover:scale-110 transition shadow-lg">{getSuitIcon(s,32)}</button>)}</div></div>
               ) : (
-                <div><h2 className="text-xl md:text-2xl font-serif mb-2">Place Bid</h2><div className="text-gold mb-4 md:mb-6">Current High: {currentBid}</div><div className="grid grid-cols-4 gap-2 mb-4">{[5,6,7,8].map(n=><button key={n} disabled={n<=currentBid} onClick={()=>makeBid(n)} className="bg-gold text-black font-bold py-2 md:py-3 rounded hover:bg-yellow-300 disabled:opacity-20 transition">{n}</button>)}</div><button onClick={()=>makeBid(0)} className="w-full bg-white/10 hover:bg-red-900/50 py-2 md:py-3 rounded text-red-300 border border-red-900/30">PASS</button></div>
+                <div>
+                  <h2 className="text-xl md:text-2xl font-serif mb-2">Place Bid</h2>
+                  <div className="text-gold mb-4 md:mb-6">Current High: {currentBid}</div>
+                  
+                  {/* TEAM BIDDING LOGIC: Hide bids if partner is winning */}
+                  {isTeammateWinning ? (
+                    <div className="mb-4 text-yellow-400 font-bold bg-yellow-900/30 p-2 rounded">
+                      Partner is winning with {currentBid}!
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-4 gap-2 mb-4">
+                      {[5,6,7,8].map(n=><button key={n} disabled={n<=currentBid} onClick={()=>makeBid(n)} className="bg-gold text-black font-bold py-2 md:py-3 rounded hover:bg-yellow-300 disabled:opacity-20 transition">{n}</button>)}
+                    </div>
+                  )}
+                  
+                  <button onClick={()=>makeBid(0)} className="w-full bg-white/10 hover:bg-red-900/50 py-2 md:py-3 rounded text-red-300 border border-red-900/30">PASS</button>
+                </div>
               )}
             </div>
           </div>
