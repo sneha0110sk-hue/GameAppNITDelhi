@@ -10,7 +10,7 @@ import {
   signOut 
 } from 'firebase/auth';
 import { getFirestore, doc, setDoc, getDoc, onSnapshot, updateDoc, arrayUnion, increment, runTransaction } from 'firebase/firestore';
-import { Heart, Diamond, Club, Spade, RotateCcw, Pencil, Check, X, LogOut, UserCircle, Play, ArrowRight } from 'lucide-react';
+import { Heart, Diamond, Club, Spade, RotateCcw, Pencil, Check, X, LogOut, UserCircle, Play } from 'lucide-react';
 
 // --- STYLES ---
 const styles = `
@@ -430,8 +430,8 @@ export default function App() {
           <div className="glass-panel p-2 md:p-3 rounded-xl pointer-events-auto">
             <div className="text-[10px] md:text-xs text-gray-400 uppercase tracking-wider mb-1">Score</div>
             <div className="flex gap-3 md:gap-6 font-serif text-sm md:text-xl">
-              <span className="text-red-300">A: <b className="text-white">{gameState.scores.A}</b></span>
-              <span className="text-blue-300">B: <b className="text-white">{gameState.scores.B}</b></span>
+              <span className="text-red-300">A: <b className="text-white">{(gameState.scores || {}).A || 0}</b></span>
+              <span className="text-blue-300">B: <b className="text-white">{(gameState.scores || {}).B || 0}</b></span>
             </div>
           </div>
           {gameState.bid.suit && (
@@ -458,15 +458,15 @@ export default function App() {
                 </div>
                 {isMe ? (
                   <div className="flex flex-col items-center -space-y-12 md:-space-y-16 transition-all duration-300 pb-2 md:pb-4">
-                    <div className="flex gap-1 md:gap-2 opacity-90">{player.faceDown.map(c=><Card key={c.id} faceDown isSmall playable={isActive && player.hand.length===0 && player.faceUp.length===0} onClick={()=>playCard(c,'faceDown')}/>)}</div>
-                    <div className="flex gap-1 md:gap-2 z-10 mb-2 md:mb-4">{player.faceUp.map(c=><Card key={c.id} card={c} isSmall playable={isActive} onClick={()=>playCard(c,'faceUp')}/>)}</div>
-                    <div className="flex -space-x-3 md:-space-x-4 h-24 md:h-32 items-end z-20 hover:-space-x-1 transition-all">{player.hand.map((c,i)=><Card key={c.id} card={c} index={i} total={player.hand.length} playable={isActive} onClick={()=>playCard(c,'hand')}/>)}</div>
+                    <div className="flex gap-1 md:gap-2 opacity-90">{(player.faceDown || []).map(c=><Card key={c.id} faceDown isSmall playable={isActive && player.hand.length===0 && player.faceUp.length===0} onClick={()=>playCard(c,'faceDown')}/>)}</div>
+                    <div className="flex gap-1 md:gap-2 z-10 mb-2 md:mb-4">{(player.faceUp || []).map(c=><Card key={c.id} card={c} isSmall playable={isActive} onClick={()=>playCard(c,'faceUp')}/>)}</div>
+                    <div className="flex -space-x-3 md:-space-x-4 h-24 md:h-32 items-end z-20 hover:-space-x-1 transition-all">{(player.hand || []).map((c,i)=><Card key={c.id} card={c} index={i} total={player.hand.length} playable={isActive} onClick={()=>playCard(c,'hand')}/>)}</div>
                   </div>
                 ) : (
                   <div className="flex flex-col items-center -space-y-3 md:-space-y-4 scale-90 opacity-60">
-                     <div className="flex gap-0.5 md:gap-1">{player.faceDown.map((_,i)=><Card key={i} faceDown isSmall/>)}</div>
-                     <div className="flex gap-0.5 md:gap-1 z-10">{player.faceUp.map((c,i)=><Card key={i} card={c} isSmall/>)}</div>
-                     <div className="flex gap-0.5 md:gap-1 z-20">{player.hand.map((_,i)=><Card key={i} faceDown isSmall/>)}</div>
+                     <div className="flex gap-0.5 md:gap-1">{(player.faceDown || []).map((_,i)=><Card key={i} faceDown isSmall/>)}</div>
+                     <div className="flex gap-0.5 md:gap-1 z-10">{(player.faceUp || []).map((c,i)=><Card key={i} card={c} isSmall/>)}</div>
+                     <div className="flex gap-0.5 md:gap-1 z-20">{(player.hand || []).map((_,i)=><Card key={i} faceDown isSmall/>)}</div>
                   </div>
                 )}
               </div>
@@ -474,7 +474,7 @@ export default function App() {
           })}
           <div className="w-32 h-32 md:w-64 md:h-64 relative flex items-center justify-center">
             <div className="absolute inset-0 border-2 border-white/5 rounded-full animate-pulse"></div>
-            {gameState.trick.map((play, i) => {
+            {(gameState.trick || []).map((play, i) => {
               const relIdx = (play.playerIndex - mySeatIndex + 6) % 6;
               const rotations = [0, -60, -120, 180, 120, 60];
               return (<div key={i} className="absolute animate-deal" style={{ transform: `rotate(${rotations[relIdx]}deg) translateY(-40px) scale(0.8)` }}><div className="md:scale-125 origin-center"><Card card={play.card}/></div></div>);
