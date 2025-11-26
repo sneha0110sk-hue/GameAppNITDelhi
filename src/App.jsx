@@ -10,7 +10,7 @@ import {
   signOut 
 } from 'firebase/auth';
 import { getFirestore, doc, setDoc, getDoc, onSnapshot, updateDoc, arrayUnion, increment, runTransaction } from 'firebase/firestore';
-import { Heart, Diamond, Club, Spade, RotateCcw, Pencil, Check, X, LogOut, UserCircle, Play } from 'lucide-react';
+import { Heart, Diamond, Club, Spade, RotateCcw, Pencil, Check, X, LogOut, UserCircle, Play, Bot } from 'lucide-react';
 
 // --- STYLES ---
 const styles = `
@@ -257,6 +257,33 @@ export default function App() {
     setLoading(false);
   };
 
+  const addBot = async () => {
+    if (!user || !gameId || !db) return;
+    setLoading(true);
+    const gameRef = doc(db, 'artifacts', APP_ID, 'public', 'data', 'games', gameId);
+    try {
+      await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw "Game not found!";
+        const data = gameDoc.data();
+        if (data.players.length >= 6) throw "Game is full!";
+        
+        const idx = data.players.length;
+        const botId = `bot-${Date.now()}`;
+        const newPlayer = { 
+          uid: botId, 
+          name: `Bot ${idx+1}`, 
+          photo: null,
+          team: idx % 2 === 0 ? 'A' : 'B', 
+          seatIndex: idx, 
+          hand:[], faceUp:[], faceDown:[] 
+        };
+        transaction.update(gameRef, { players: [...data.players, newPlayer] });
+      });
+    } catch (err) { alert(err); }
+    setLoading(false);
+  };
+
   const startGame = async () => {
     const deck = generateDeck();
     const players = [...gameState.players];
@@ -400,7 +427,12 @@ export default function App() {
                   ))}
                 </div>
                 {gameState.hostId === user.uid ? (
-                  <button disabled={gameState.players.length<6} onClick={startGame} className="w-full bg-green-600 disabled:bg-gray-600 py-3 rounded font-bold shadow-lg text-sm md:text-base flex justify-center gap-2"><Play size={20}/> START GAME ({gameState.players.length}/6)</button>
+                  <div className="flex flex-col gap-2">
+                    <button disabled={gameState.players.length>=6} onClick={addBot} className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-gray-600 disabled:opacity-50 text-white font-bold py-2 rounded shadow flex justify-center gap-2 items-center">
+                      <Bot size={20}/> Add Bot
+                    </button>
+                    <button disabled={gameState.players.length<6} onClick={startGame} className="w-full bg-green-600 disabled:bg-gray-600 py-3 rounded font-bold shadow-lg text-sm md:text-base flex justify-center gap-2"><Play size={20}/> START GAME ({gameState.players.length}/6)</button>
+                  </div>
                 ) : (
                   <div className="text-yellow-400 animate-pulse text-sm">Waiting for Host to Start...</div>
                 )}
